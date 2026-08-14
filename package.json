@@ -1,7 +1,7 @@
 {
   "name": "librarysystem-api",
   "version": "1.0.0",
-  "type": "module",
+  
   "description": "Library System API - Backend for school library POS and Admin",
   "main": "server.ts",
   "scripts": {
@@ -34,6 +34,7 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^22.0.0",
     "@types/nodemailer": "^6.4.15",
+    "nodemon": "^3.1.14",
     "tsx": "^4.19.0",
     "typescript": "^5.9.0"
   },

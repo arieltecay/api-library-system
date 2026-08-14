@@ -46,15 +46,7 @@ app.use('/credits', creditsRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/settings', settingsRoutes);
 
-// Handle OPTIONS preflight globally
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Max-Age', '86400');
-  res.send();
-});
-
+// Handle 404s
 app.use(notFoundHandler);
 app.use(errorHandler);
 
@@ -80,8 +72,7 @@ export default async function handler(req: import('express').Request, res: impor
   }
 }
 
-// For Vercel: export the handler as default
-// For traditional hosting: start the server
+// Start server if run directly (Node 22 ESM compatible)
 if (require.main === module) {
   const port = env.PORT;
   mongoose.connect(env.MONGODB_URI)
@@ -99,3 +90,4 @@ if (require.main === module) {
 
 // Graceful shutdown
 export { closeMongoDBConnection };
+export { handler as apiHandler };

@@ -50,7 +50,6 @@ const clientSchema = new Schema<IClient>(
   }
 );
 
-clientSchema.index({ dni: 1 }, { unique: true });
 clientSchema.index({ fullName: 1 });
 clientSchema.index({ balance: 1 });
 clientSchema.index({ isDefault: 1 });
