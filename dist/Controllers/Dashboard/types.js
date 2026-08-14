@@ -1,0 +1,24 @@
+import { z } from 'zod';
+export const todaySchema = z.object({});
+export const salesChartSchema = z.object({
+    query: z.object({
+        days: z.coerce.number().int().min(1).max(90).default(7),
+    }),
+});
+export const topProductsSchema = z.object({
+    query: z.object({
+        limit: z.coerce.number().int().min(1).max(50).default(10),
+    }),
+});
+export const dailyClosingSchema = z.object({
+    query: z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    }),
+});
+export const shiftsSchema = z.object({
+    query: z.object({
+        fromDate: z.string().datetime().optional(),
+        toDate: z.string().datetime().optional(),
+    }),
+});
+//# sourceMappingURL=types.js.map

@@ -1,0 +1,51 @@
+import { z } from 'zod';
+export const createProductSchema = z.object({
+    body: z.object({
+        name: z.string().min(1, 'Nombre requerido').max(120),
+        description: z.string().max(500).optional(),
+        type: z.enum(['product', 'service']).default('product'),
+        price: z.number().min(0, 'El precio debe ser >= 0'),
+        cost: z.number().min(0).optional(),
+        stock: z.number().int().min(0).default(0),
+        minStock: z.number().int().min(0).optional(),
+        unit: z.enum(['unit', 'sheet', 'binding']).optional(),
+    }),
+});
+export const updateProductSchema = z.object({
+    params: z.object({
+        id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido'),
+    }),
+    body: z.object({
+        name: z.string().min(1).max(120).optional(),
+        description: z.string().max(500).optional(),
+        type: z.enum(['product', 'service']).optional(),
+        price: z.number().min(0).optional(),
+        cost: z.number().min(0).optional(),
+        stock: z.number().int().min(0).optional(),
+        minStock: z.number().int().min(0).optional(),
+        unit: z.enum(['unit', 'sheet', 'binding']).optional(),
+        active: z.boolean().optional(),
+    }),
+});
+export const updateStockSchema = z.object({
+    params: z.object({
+        id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido'),
+    }),
+    body: z.object({
+        quantity: z.number().int('La cantidad debe ser entera'),
+        operation: z.enum(['add', 'set']).default('add'),
+    }),
+});
+export const listProductsSchema = z.object({
+    query: z.object({
+        search: z.string().optional(),
+        type: z.enum(['product', 'service']).optional(),
+        active: z.coerce.boolean().optional(),
+        lowStock: z.coerce.boolean().optional(),
+        page: z.coerce.number().int().min(1).default(1),
+        limit: z.coerce.number().int().min(1).max(100).default(20),
+        sortBy: z.enum(['name', 'price', 'stock', 'createdAt']).default('name'),
+        sortOrder: z.enum(['asc', 'desc']).default('asc'),
+    }),
+});
+//# sourceMappingURL=types.js.map
