@@ -12,6 +12,8 @@ export interface IUser extends Document {
   role: UserRole;
   active: boolean;
   lastLoginAt?: Date;
+  school: Types.ObjectId;
+  pos?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
@@ -56,6 +58,15 @@ const userSchema = new Schema<IUser>(
     },
     lastLoginAt: {
       type: Date,
+    },
+    school: {
+      type: Schema.Types.ObjectId,
+      ref: 'School',
+      required: true,
+    },
+    pos: {
+      type: Schema.Types.ObjectId,
+      ref: 'Pos',
     },
   },
   {

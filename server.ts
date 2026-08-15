@@ -15,6 +15,7 @@ import cashShiftsRoutes from './routes/cash-shifts/index.js';
 import creditsRoutes from './routes/credits/index.js';
 import dashboardRoutes from './routes/dashboard/index.js';
 import settingsRoutes from './routes/settings/index.js';
+import schoolsRoutes from './routes/schools/index.js';
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use('/cash-shifts', cashShiftsRoutes);
 app.use('/credits', creditsRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/settings', settingsRoutes);
+app.use('/schools', schoolsRoutes);
 
 // Handle 404s
 app.use(notFoundHandler);

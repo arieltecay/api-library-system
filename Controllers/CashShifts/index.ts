@@ -4,13 +4,13 @@ import * as cashShiftsService from '../../Services/CashShifts/index.js';
 export async function openCashShift(req: Request, res: Response): Promise<void> {
   if (!req.user) throw new Error('Usuario no autenticado');
   const { openingAmount } = req.body;
-  const cashShift = await cashShiftsService.openCashShift(req.user.sub, openingAmount);
+  const cashShift = await cashShiftsService.openCashShift(req.schoolId!, req.user.sub, openingAmount);
   res.status(201).json(cashShift);
 }
 
 export async function getActiveCashShift(req: Request, res: Response): Promise<void> {
   if (!req.user) throw new Error('Usuario no autenticado');
-  const result = await cashShiftsService.getActiveCashShiftWithDetails(req.user.sub);
+  const result = await cashShiftsService.getActiveCashShiftWithDetails(req.schoolId!, req.user.sub);
   res.json(result);
 }
 
@@ -18,13 +18,13 @@ export async function closeCashShift(req: Request, res: Response): Promise<void>
   if (!req.user) throw new Error('Usuario no autenticado');
   const { id } = req.params;
   const { closingAmount, note } = req.body;
-  const result = await cashShiftsService.closeCashShift(id as string, req.user.sub, closingAmount, note);
+  const result = await cashShiftsService.closeCashShift(req.schoolId!, id as string, req.user.sub, closingAmount, note);
   res.json(result);
 }
 
 export async function getCashShift(req: Request, res: Response): Promise<void> {
   const id = req.params.id as string;
-  const cashShift = await cashShiftsService.getCashShiftById(id);
+  const cashShift = await cashShiftsService.getCashShiftById(req.schoolId!, id);
   res.json(cashShift);
 }
 
@@ -34,6 +34,7 @@ export async function listCashShifts(req: Request, res: Response): Promise<void>
   const toDate = query.toDate ? new Date(query.toDate as string) : undefined;
   const hasDifference = query.hasDifference !== undefined ? query.hasDifference === 'true' : undefined;
   const result = await cashShiftsService.listCashShifts({
+    schoolId: req.schoolId!,
     page: Number(query.page) || 1,
     limit: Number(query.limit) || 20,
     sortBy: (query.sortBy as string) || 'openedAt',
@@ -49,6 +50,6 @@ export async function listCashShifts(req: Request, res: Response): Promise<void>
 
 export async function getDailySummary(req: Request, res: Response): Promise<void> {
   const date = req.query.date ? new Date(req.query.date as string) : undefined;
-  const summary = await cashShiftsService.getDailySummary(date);
+  const summary = await cashShiftsService.getDailySummary(req.schoolId!, date);
   res.json(summary);
 }

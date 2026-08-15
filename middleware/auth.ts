@@ -7,6 +7,8 @@ import { UserRole } from '../models/User/index.js';
 export interface AuthPayload {
   sub: string;
   role: UserRole;
+  schoolId: string;
+  posId?: string;
   iat: number;
   exp: number;
 }
@@ -15,6 +17,8 @@ declare global {
   namespace Express {
     interface Request {
       user?: AuthPayload;
+      schoolId?: string;
+      posId?: string;
     }
   }
 }
@@ -33,6 +37,8 @@ export function authMiddleware(
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
     req.user = payload;
+    req.schoolId = payload.schoolId;
+    req.posId = payload.posId;
     next();
   } catch {
     throw new AuthenticationError('Token inválido o expirado');

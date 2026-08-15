@@ -41,6 +41,7 @@ export interface SettleDebtResult {
 }
 
 export async function listCredits(params: {
+  schoolId: string;
   search?: string;
   overdue?: boolean;
   page: number;
@@ -48,7 +49,7 @@ export async function listCredits(params: {
   sortBy: string;
   sortOrder: 'asc' | 'desc';
 }): Promise<CreditListResult> {
-  const filter: Record<string, unknown> = { balance: { $gt: 0 }, active: true };
+  const filter: Record<string, unknown> = { school: params.schoolId, balance: { $gt: 0 }, active: true };
 
   if (params.search) {
     filter.$or = [
@@ -57,8 +58,6 @@ export async function listCredits(params: {
     ];
   }
 
-  // For overdue, we'd need to check credit movements older than 30 days
-  // Simplified: just return all with balance > 0
   const clients = await ClientModel.find(filter).lean();
   
   // Calculate summary
@@ -87,19 +86,19 @@ export async function listCredits(params: {
   };
 }
 
-export async function getClientCredit(clientId: string, page: number, limit: number): Promise<ClientCreditResult> {
-  const client = await ClientModel.findById(clientId).lean();
+export async function getClientCredit(schoolId: string, clientId: string, page: number, limit: number): Promise<ClientCreditResult> {
+  const client = await ClientModel.findOne({ _id: clientId, school: schoolId }).lean();
   if (!client) {
     throw new NotFoundError('Cliente no encontrado');
   }
 
   const [movements, total] = await Promise.all([
-    CreditMovementModel.find({ client: clientId })
+    CreditMovementModel.find({ client: clientId, school: schoolId })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .lean(),
-    CreditMovementModel.countDocuments({ client: clientId }),
+    CreditMovementModel.countDocuments({ client: clientId, school: schoolId }),
   ]);
 
   return {
@@ -113,13 +112,14 @@ export async function getClientCredit(clientId: string, page: number, limit: num
 }
 
 export async function settleDebt(
+  schoolId: string,
   clientId: string,
   adminId: string,
   amount: number,
   method: 'cash' | 'transfer',
   note?: string
 ): Promise<SettleDebtResult> {
-  const client = await ClientModel.findById(clientId);
+  const client = await ClientModel.findOne({ _id: clientId, school: schoolId });
   if (!client) {
     throw new NotFoundError('Cliente no encontrado');
   }
@@ -139,6 +139,7 @@ export async function settleDebt(
   if (newBalance === 0) {
     const unsettledSale = await SaleModel.findOne({
       client: clientId,
+      school: schoolId,
       paymentMethod: 'credit',
       settled: false,
       type: 'sale',
@@ -153,6 +154,7 @@ export async function settleDebt(
   const creditMovement = await CreditMovementModel.create({
     client: clientId,
     sale: settledSale?._id,
+    school: schoolId,
     type: 'payment',
     amount,
     balanceAfter: newBalance,
@@ -168,7 +170,7 @@ export async function settleDebt(
   };
 }
 
-export async function getCreditsSummary(): Promise<{
+export async function getCreditsSummary(schoolId: string): Promise<{
   totalOutstanding: number;
   clientsWithDebt: number;
   totalCreditsThisMonth: number;
@@ -177,8 +179,9 @@ export async function getCreditsSummary(): Promise<{
   overdueAmount: number;
 }> {
   const [clients, movementsThisMonth] = await Promise.all([
-    ClientModel.find({ balance: { $gt: 0 }, active: true }).lean(),
+    ClientModel.find({ school: schoolId, balance: { $gt: 0 }, active: true }).lean(),
     CreditMovementModel.find({
+      school: schoolId,
       createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
     }).lean(),
   ]);
@@ -198,6 +201,7 @@ export async function getCreditsSummary(): Promise<{
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
   const overdueSales = await SaleModel.find({
+    school: schoolId,
     paymentMethod: 'credit',
     settled: false,
     createdAt: { $lt: thirtyDaysAgo }
@@ -217,8 +221,8 @@ export async function getCreditsSummary(): Promise<{
   };
 }
 
-export async function getRecentHistory(limit: number = 5): Promise<CreditMovementLean[]> {
-  const movements = await CreditMovementModel.find()
+export async function getRecentHistory(schoolId: string, limit: number = 5): Promise<CreditMovementLean[]> {
+  const movements = await CreditMovementModel.find({ school: schoolId })
     .sort({ createdAt: -1 })
     .limit(limit)
     .populate({

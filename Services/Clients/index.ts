@@ -25,6 +25,7 @@ export interface ClientHistoryResult {
 }
 
 export async function listClients(params: {
+  schoolId: string;
   search?: string;
   hasDebt?: boolean;
   active?: boolean;
@@ -33,7 +34,7 @@ export async function listClients(params: {
   sortBy: string;
   sortOrder: 'asc' | 'desc';
 }): Promise<ClientListResult> {
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { school: params.schoolId };
 
   if (params.search) {
     filter.$or = [
@@ -70,80 +71,80 @@ export async function listClients(params: {
   };
 }
 
-export async function getClientById(id: string): Promise<ClientLean> {
-  const client = await ClientModel.findById(id).lean();
+export async function getClientById(schoolId: string, id: string): Promise<ClientLean> {
+  const client = await ClientModel.findOne({ _id: id, school: schoolId }).lean();
   if (!client) {
     throw new NotFoundError('Cliente no encontrado');
   }
   return withId(client) as ClientLean;
 }
 
-export async function createClient(data: {
+export async function createClient(schoolId: string, data: {
   fullName: string;
   phone?: string;
   dni: string;
 }): Promise<ClientLean> {
-  const existing = await ClientModel.findOne({ dni: data.dni }).lean();
+  const existing = await ClientModel.findOne({ dni: data.dni, school: schoolId }).lean();
   if (existing) {
-    throw new ConflictError('Ya existe un cliente con ese DNI');
+    throw new ConflictError('Ya existe un cliente con ese DNI en esta escuela');
   }
 
-  const client = await ClientModel.create(data);
+  const client = await ClientModel.create({ ...data, school: schoolId });
   return client.toJSON() as ClientLean;
 }
 
-export async function updateClient(id: string, data: Partial<{
+export async function updateClient(schoolId: string, id: string, data: Partial<{
   fullName: string;
   phone?: string;
   dni: string;
   active: boolean;
 }>): Promise<ClientLean> {
   if (data.dni) {
-    const existing = await ClientModel.findOne({ dni: data.dni, _id: { $ne: id } }).lean();
+    const existing = await ClientModel.findOne({ dni: data.dni, school: schoolId, _id: { $ne: id } }).lean();
     if (existing) {
-      throw new ConflictError('Ya existe un cliente con ese DNI');
+      throw new ConflictError('Ya existe un cliente con ese DNI en esta escuela');
     }
   }
 
-  const client = await ClientModel.findByIdAndUpdate(id, data, { new: true, runValidators: true }).lean();
+  const client = await ClientModel.findOneAndUpdate({ _id: id, school: schoolId }, data, { new: true, runValidators: true }).lean();
   if (!client) {
     throw new NotFoundError('Cliente no encontrado');
   }
   return withId(client) as ClientLean;
 }
 
-export async function deleteClient(id: string): Promise<void> {
-  const client = await ClientModel.findById(id).lean();
+export async function deleteClient(schoolId: string, id: string): Promise<void> {
+  const client = await ClientModel.findOne({ _id: id, school: schoolId }).lean();
   if (!client) {
     throw new NotFoundError('Cliente no encontrado');
   }
   if (client.isDefault) {
     throw new Error('No se puede eliminar el cliente por defecto');
   }
-  await ClientModel.findByIdAndDelete(id);
+  await ClientModel.findOneAndDelete({ _id: id, school: schoolId });
 }
 
-export async function getClientHistory(id: string, page: number, limit: number): Promise<ClientHistoryResult> {
-  const client = await ClientModel.findById(id).lean();
+export async function getClientHistory(schoolId: string, id: string, page: number, limit: number): Promise<ClientHistoryResult> {
+  const client = await ClientModel.findOne({ _id: id, school: schoolId }).lean();
   if (!client) {
     throw new NotFoundError('Cliente no encontrado');
   }
 
   const [sales, creditMovements, totalSales] = await Promise.all([
-    SaleModel.find({ client: id })
+    SaleModel.find({ client: id, school: schoolId })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .lean(),
-    CreditMovementModel.find({ client: id })
+    CreditMovementModel.find({ client: id, school: schoolId })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .lean(),
-    SaleModel.countDocuments({ client: id }),
+    SaleModel.countDocuments({ client: id, school: schoolId }),
   ]);
 
-  const total = totalSales + await CreditMovementModel.countDocuments({ client: id });
+  const total = totalSales + await CreditMovementModel.countDocuments({ client: id, school: schoolId });
 
   return {
     sales: withIds(sales) as SaleLean[],
@@ -155,13 +156,13 @@ export async function getClientHistory(id: string, page: number, limit: number):
   };
 }
 
-export async function getDebtors(): Promise<ClientLean[]> {
-  const clients = await ClientModel.find({ balance: { $gt: 0 }, active: true }).lean();
+export async function getDebtors(schoolId: string): Promise<ClientLean[]> {
+  const clients = await ClientModel.find({ school: schoolId, balance: { $gt: 0 }, active: true }).lean();
   return withIds(clients) as ClientLean[];
 }
 
-export async function getClientWithDebt(id: string): Promise<ClientLean & { debt: number }> {
-  const client = await ClientModel.findById(id).lean();
+export async function getClientWithDebt(schoolId: string, id: string): Promise<ClientLean & { debt: number }> {
+  const client = await ClientModel.findOne({ _id: id, school: schoolId }).lean();
   if (!client) {
     throw new NotFoundError('Cliente no encontrado');
   }

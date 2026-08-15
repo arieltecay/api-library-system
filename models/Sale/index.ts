@@ -25,6 +25,7 @@ export interface ISale extends Document {
   client: Types.ObjectId;
   seller: Types.ObjectId;
   cashShift: Types.ObjectId;
+  school: Types.ObjectId;
   originalSale?: Types.ObjectId;
   settled: boolean;
   settledAt?: Date;
@@ -133,6 +134,11 @@ const saleSchema = new Schema<ISale>(
       ref: 'CashShift',
       required: true,
     },
+    school: {
+      type: Schema.Types.ObjectId,
+      ref: 'School',
+      required: true,
+    },
     originalSale: {
       type: Schema.Types.ObjectId,
       ref: 'Sale',
@@ -163,13 +169,13 @@ const saleSchema = new Schema<ISale>(
   }
 );
 
-saleSchema.index({ seller: 1, createdAt: -1 });
-saleSchema.index({ client: 1, createdAt: -1 });
-saleSchema.index({ cashShift: 1 });
-saleSchema.index({ paymentMethod: 1 });
-saleSchema.index({ type: 1 });
-saleSchema.index({ voided: 1 });
-saleSchema.index({ settled: 1 });
+saleSchema.index({ school: 1, seller: 1, createdAt: -1 });
+saleSchema.index({ school: 1, client: 1, createdAt: -1 });
+saleSchema.index({ school: 1, cashShift: 1 });
+saleSchema.index({ school: 1, paymentMethod: 1 });
+saleSchema.index({ school: 1, type: 1 });
+saleSchema.index({ school: 1, voided: 1 });
+saleSchema.index({ school: 1, settled: 1 });
 
 saleSchema.set('toJSON', {
   transform: (_doc, ret: any) => {

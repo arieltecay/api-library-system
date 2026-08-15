@@ -31,6 +31,7 @@ export interface StockUpdateResult {
 }
 
 export async function listProducts(params: {
+  schoolId: string;
   search?: string;
   type?: 'product' | 'service';
   active?: boolean;
@@ -40,7 +41,7 @@ export async function listProducts(params: {
   sortBy: string;
   sortOrder: 'asc' | 'desc';
 }): Promise<ProductListResult> {
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { school: params.schoolId };
 
   if (params.search) {
     filter.$or = [
@@ -74,15 +75,15 @@ export async function listProducts(params: {
   };
 }
 
-export async function getProductById(id: string): Promise<ProductLean> {
-  const product = await ProductModel.findById(id).lean();
+export async function getProductById(schoolId: string, id: string): Promise<ProductLean> {
+  const product = await ProductModel.findOne({ _id: id, school: schoolId }).lean();
   if (!product) {
     throw new NotFoundError('Producto no encontrado');
   }
   return withCode(withId(product) as ProductLean);
 }
 
-export async function createProduct(data: {
+export async function createProduct(schoolId: string, data: {
   name: string;
   description?: string;
   type: ProductType;
@@ -92,20 +93,21 @@ export async function createProduct(data: {
   minStock?: number;
   unit?: ProductUnit;
 }): Promise<ProductLean> {
-  const existing = await ProductModel.findOne({ name: data.name }).lean();
+  const existing = await ProductModel.findOne({ name: data.name, school: schoolId }).lean();
   if (existing) {
-    throw new ConflictError('Ya existe un producto con ese nombre');
+    throw new ConflictError('Ya existe un producto con ese nombre en esta escuela');
   }
 
   const product = await ProductModel.create({
     ...data,
+    school: schoolId,
     stock: data.type === 'service' ? 0 : data.stock,
   });
 
   return withCode(product.toJSON() as ProductLean);
 }
 
-export async function updateProduct(id: string, data: Partial<{
+export async function updateProduct(schoolId: string, id: string, data: Partial<{
   name: string;
   description?: string;
   type: ProductType;
@@ -117,9 +119,9 @@ export async function updateProduct(id: string, data: Partial<{
   active: boolean;
 }>): Promise<ProductLean> {
   if (data.name) {
-    const existing = await ProductModel.findOne({ name: data.name, _id: { $ne: id } }).lean();
+    const existing = await ProductModel.findOne({ name: data.name, school: schoolId, _id: { $ne: id } }).lean();
     if (existing) {
-      throw new ConflictError('Ya existe un producto con ese nombre');
+      throw new ConflictError('Ya existe un producto con ese nombre en esta escuela');
     }
   }
 
@@ -127,22 +129,22 @@ export async function updateProduct(id: string, data: Partial<{
     throw new ValidationError('Los servicios no pueden tener stock');
   }
 
-  const product = await ProductModel.findByIdAndUpdate(id, data, { new: true, runValidators: true }).lean();
+  const product = await ProductModel.findOneAndUpdate({ _id: id, school: schoolId }, data, { new: true, runValidators: true }).lean();
   if (!product) {
     throw new NotFoundError('Producto no encontrado');
   }
   return withCode(withId(product) as ProductLean);
 }
 
-export async function deleteProduct(id: string): Promise<void> {
-  const product = await ProductModel.findByIdAndDelete(id);
+export async function deleteProduct(schoolId: string, id: string): Promise<void> {
+  const product = await ProductModel.findOneAndDelete({ _id: id, school: schoolId });
   if (!product) {
     throw new NotFoundError('Producto no encontrado');
   }
 }
 
-export async function updateStock(id: string, quantity: number, operation: 'add' | 'set'): Promise<StockUpdateResult> {
-  const product = await ProductModel.findById(id);
+export async function updateStock(schoolId: string, id: string, quantity: number, operation: 'add' | 'set'): Promise<StockUpdateResult> {
+  const product = await ProductModel.findOne({ _id: id, school: schoolId });
   if (!product) {
     throw new NotFoundError('Producto no encontrado');
   }
@@ -168,8 +170,9 @@ export async function updateStock(id: string, quantity: number, operation: 'add'
   };
 }
 
-export async function getLowStockProducts(): Promise<ProductLean[]> {
+export async function getLowStockProducts(schoolId: string): Promise<ProductLean[]> {
   const products = await ProductModel.find({
+    school: schoolId,
     active: true,
     type: 'product',
     $expr: { $lte: ['$stock', { $ifNull: ['$minStock', 10] }] },

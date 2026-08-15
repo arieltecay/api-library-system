@@ -19,14 +19,15 @@ export interface CloseCashShiftResult {
   difference: number;
 }
 
-export async function openCashShift(sellerId: string, openingAmount: number): Promise<CashShiftLean> {
-  const existing = await CashShiftModel.findOne({ seller: sellerId, status: 'open' }).lean();
+export async function openCashShift(schoolId: string, sellerId: string, openingAmount: number): Promise<CashShiftLean> {
+  const existing = await CashShiftModel.findOne({ seller: sellerId, school: schoolId, status: 'open' }).lean();
   if (existing) {
     throw new ConflictError('Ya tienes un turno abierto');
   }
 
   const cashShift = await CashShiftModel.create({
     seller: sellerId,
+    school: schoolId,
     openingAmount,
     status: 'open',
   });
@@ -34,18 +35,19 @@ export async function openCashShift(sellerId: string, openingAmount: number): Pr
   return cashShift.toJSON() as CashShiftLean;
 }
 
-export async function getActiveCashShift(sellerId: string): Promise<CashShiftLean | null> {
-  const cashShift = await CashShiftModel.findOne({ seller: sellerId, status: 'open' }).lean();
+export async function getActiveCashShift(schoolId: string, sellerId: string): Promise<CashShiftLean | null> {
+  const cashShift = await CashShiftModel.findOne({ seller: sellerId, school: schoolId, status: 'open' }).lean();
   return cashShift ? (withId(cashShift) as CashShiftLean) : null;
 }
 
 export async function closeCashShift(
+  schoolId: string,
   cashShiftId: string,
   sellerId: string,
   closingAmount: number,
   note?: string
 ): Promise<CloseCashShiftResult> {
-  const cashShift = await CashShiftModel.findById(cashShiftId);
+  const cashShift = await CashShiftModel.findOne({ _id: cashShiftId, school: schoolId });
   if (!cashShift) {
     throw new NotFoundError('Turno no encontrado');
   }
@@ -88,8 +90,8 @@ export async function closeCashShift(
   };
 }
 
-export async function getCashShiftById(id: string): Promise<CashShiftLean> {
-  const cashShift = await CashShiftModel.findById(id).lean();
+export async function getCashShiftById(schoolId: string, id: string): Promise<CashShiftLean> {
+  const cashShift = await CashShiftModel.findOne({ _id: id, school: schoolId }).lean();
   if (!cashShift) {
     throw new NotFoundError('Turno no encontrado');
   }
@@ -97,6 +99,7 @@ export async function getCashShiftById(id: string): Promise<CashShiftLean> {
 }
 
 export async function listCashShifts(params: {
+  schoolId: string;
   sellerId?: string;
   status?: 'open' | 'closed';
   hasDifference?: boolean;
@@ -113,7 +116,7 @@ export async function listCashShifts(params: {
   limit: number;
   totalPages: number;
 }> {
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { school: params.schoolId };
 
   if (params.sellerId) filter.seller = params.sellerId;
   if (params.status) filter.status = params.status;
@@ -137,7 +140,7 @@ export async function listCashShifts(params: {
   ]);
 
   // Obtener el número de secuencia global de cada turno (posición histórica)
-  const allShifts = await CashShiftModel.find({}).sort({ openedAt: 1 }).select('_id').lean();
+  const allShifts = await CashShiftModel.find({ school: params.schoolId }).sort({ openedAt: 1 }).select('_id').lean();
   const shiftNumberMap = new Map(allShifts.map((s, i) => [String(s._id), i + 1]));
 
   return {
@@ -153,7 +156,7 @@ export async function listCashShifts(params: {
   };
 }
 
-export async function getActiveCashShiftWithDetails(sellerId: string): Promise<{
+export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: string): Promise<{
   cashShift: CashShiftLean | null;
   aggregated: {
     cashTotal: number;
@@ -165,7 +168,7 @@ export async function getActiveCashShiftWithDetails(sellerId: string): Promise<{
     expectedCash: number;
   } | null;
 }> {
-  const cashShift = await CashShiftModel.findOne({ seller: sellerId, status: 'open' }).lean();
+  const cashShift = await CashShiftModel.findOne({ seller: sellerId, school: schoolId, status: 'open' }).lean();
   if (!cashShift) {
     return { cashShift: null, aggregated: null };
   }
@@ -216,7 +219,7 @@ export interface DailySummary {
   pendingShifts: Array<{ sellerName: string; id: string }>;
 }
 
-export async function getDailySummary(date?: Date): Promise<DailySummary> {
+export async function getDailySummary(schoolId: string, date?: Date): Promise<DailySummary> {
   const target = date ?? new Date();
   const start = new Date(target);
   start.setHours(0, 0, 0, 0);
@@ -224,13 +227,12 @@ export async function getDailySummary(date?: Date): Promise<DailySummary> {
   end.setHours(23, 59, 59, 999);
 
   const [shifts, sales, creditMovements] = await Promise.all([
-    CashShiftModel.find({ openedAt: { $gte: start, $lte: end } })
+    CashShiftModel.find({ school: schoolId, openedAt: { $gte: start, $lte: end } })
       .populate({ path: 'seller', select: 'name' })
       .lean(),
-    SaleModel.find({ createdAt: { $gte: start, $lte: end }, voided: false }).lean(),
-    // Importamos dinámicamente para evitar circularidad
+    SaleModel.find({ school: schoolId, createdAt: { $gte: start, $lte: end }, voided: false }).lean(),
     import('../../models/CreditMovement/index.js').then(m =>
-      m.CreditMovementModel.find({ createdAt: { $gte: start, $lte: end }, type: 'payment' }).lean()
+      m.CreditMovementModel.find({ school: schoolId, createdAt: { $gte: start, $lte: end }, type: 'payment' }).lean()
     ),
   ]);
 

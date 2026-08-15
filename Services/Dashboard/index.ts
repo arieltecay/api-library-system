@@ -61,13 +61,14 @@ export interface CashShiftSummary {
   status: 'open' | 'closed';
 }
 
-export async function getTodayKPIs(): Promise<TodayKPIs> {
+export async function getTodayKPIs(schoolId: string): Promise<TodayKPIs> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
   const sales = await SaleModel.find({
+    school: schoolId,
     createdAt: { $gte: today, $lt: tomorrow },
     voided: false,
   }).lean();
@@ -89,6 +90,7 @@ export async function getTodayKPIs(): Promise<TodayKPIs> {
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdaySales = await SaleModel.find({
+    school: schoolId,
     createdAt: { $gte: yesterday, $lt: today },
     voided: false,
   }).lean();
@@ -112,7 +114,7 @@ export async function getTodayKPIs(): Promise<TodayKPIs> {
   };
 }
 
-export async function getSalesChart(days: number): Promise<SalesChartData> {
+export async function getSalesChart(schoolId: string, days: number): Promise<SalesChartData> {
   const endDate = new Date();
   endDate.setHours(23, 59, 59, 999);
   const startDate = new Date(endDate);
@@ -120,6 +122,7 @@ export async function getSalesChart(days: number): Promise<SalesChartData> {
   startDate.setHours(0, 0, 0, 0);
 
   const sales = await SaleModel.find({
+    school: schoolId,
     createdAt: { $gte: startDate, $lte: endDate },
     voided: false,
     type: 'sale',
@@ -152,13 +155,14 @@ export async function getSalesChart(days: number): Promise<SalesChartData> {
   return { labels, datasets: { cash, transfer, credit, total } };
 }
 
-export async function getSalesByHour(): Promise<SalesChartData> {
+export async function getSalesByHour(schoolId: string): Promise<SalesChartData> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
   const sales = await SaleModel.find({
+    school: schoolId,
     createdAt: { $gte: today, $lt: tomorrow },
     voided: false,
     type: 'sale',
@@ -184,8 +188,8 @@ export async function getSalesByHour(): Promise<SalesChartData> {
   return { labels: hours, datasets: { cash, transfer, credit, total } };
 }
 
-export async function getTopProducts(limit: number): Promise<TopProduct[]> {
-  const sales = await SaleModel.find({ type: 'sale', voided: false }).lean();
+export async function getTopProducts(schoolId: string, limit: number): Promise<TopProduct[]> {
+  const sales = await SaleModel.find({ school: schoolId, type: 'sale', voided: false }).lean();
 
   const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
 
@@ -205,13 +209,14 @@ export async function getTopProducts(limit: number): Promise<TopProduct[]> {
     .slice(0, limit);
 }
 
-export async function getDailyClosing(date?: string): Promise<DailyClosing> {
+export async function getDailyClosing(schoolId: string, date?: string): Promise<DailyClosing> {
   const targetDate = date ? new Date(date) : new Date();
   targetDate.setHours(0, 0, 0, 0);
   const nextDay = new Date(targetDate);
   nextDay.setDate(nextDay.getDate() + 1);
 
   const sales = await SaleModel.find({
+    school: schoolId,
     createdAt: { $gte: targetDate, $lt: nextDay },
     voided: false,
   }).lean();
@@ -226,6 +231,7 @@ export async function getDailyClosing(date?: string): Promise<DailyClosing> {
   const totalChange = salesOnly.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.change, 0);
 
   const shifts = await CashShiftModel.find({
+    school: schoolId,
     openedAt: { $gte: targetDate, $lt: nextDay },
   }).lean();
 
@@ -271,8 +277,8 @@ export async function getDailyClosing(date?: string): Promise<DailyClosing> {
   };
 }
 
-export async function getShifts(fromDate?: Date, toDate?: Date): Promise<CashShiftSummary[]> {
-  const filter: Record<string, unknown> = {};
+export async function getShifts(schoolId: string, fromDate?: Date, toDate?: Date): Promise<CashShiftSummary[]> {
+  const filter: Record<string, unknown> = { school: schoolId };
   if (fromDate || toDate) {
     filter.openedAt = {};
     if (fromDate) (filter.openedAt as Record<string, Date>).$gte = fromDate;

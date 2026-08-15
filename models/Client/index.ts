@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, Types } from 'mongoose';
 
 export interface IClient extends Document {
   fullName: string;
@@ -7,6 +7,7 @@ export interface IClient extends Document {
   isDefault: boolean;
   balance: number;
   active: boolean;
+  school: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,7 +28,6 @@ const clientSchema = new Schema<IClient>(
     dni: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       maxlength: 20,
     },
@@ -43,6 +43,11 @@ const clientSchema = new Schema<IClient>(
       type: Boolean,
       default: true,
     },
+    school: {
+      type: Schema.Types.ObjectId,
+      ref: 'School',
+      required: true,
+    },
   },
   {
     timestamps: true,
@@ -50,9 +55,10 @@ const clientSchema = new Schema<IClient>(
   }
 );
 
-clientSchema.index({ fullName: 1 });
-clientSchema.index({ balance: 1 });
-clientSchema.index({ isDefault: 1 });
+clientSchema.index({ school: 1, fullName: 1 });
+clientSchema.index({ school: 1, dni: 1 }, { unique: true });
+clientSchema.index({ school: 1, balance: 1 });
+clientSchema.index({ school: 1, isDefault: 1 });
 
 clientSchema.set('toJSON', {
   transform: (_doc, ret: any) => {

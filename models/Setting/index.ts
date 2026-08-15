@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, Types } from 'mongoose';
 
 export interface ISetting extends Document {
   // General
@@ -12,6 +12,7 @@ export interface ISetting extends Document {
   maxDiscountPerSeller: number;
   allowSaleWithoutStock: boolean;
   scanSound: boolean;
+  school: Types.ObjectId;
 
   createdAt: Date;
   updatedAt: Date;
@@ -28,12 +29,19 @@ const settingSchema = new Schema<ISetting>(
     maxDiscountPerSeller: { type: Number, required: true, default: 20 },
     allowSaleWithoutStock: { type: Boolean, required: true, default: false },
     scanSound: { type: Boolean, required: true, default: true },
+    school: {
+      type: Schema.Types.ObjectId,
+      ref: 'School',
+      required: true,
+    },
   },
   {
     timestamps: true,
     versionKey: false,
   }
 );
+
+settingSchema.index({ school: 1 }, { unique: true });
 
 settingSchema.set('toJSON', {
   transform: (_doc, ret: any) => {

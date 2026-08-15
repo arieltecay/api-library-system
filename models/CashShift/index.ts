@@ -4,6 +4,7 @@ export type CashShiftStatus = 'open' | 'closed';
 
 export interface ICashShift extends Document {
   seller: Types.ObjectId;
+  school: Types.ObjectId;
   openedAt: Date;
   closedAt?: Date;
   openingAmount: number;
@@ -21,6 +22,11 @@ const cashShiftSchema = new Schema<ICashShift>(
     seller: {
       type: Schema.Types.ObjectId,
       ref: 'User',
+      required: true,
+    },
+    school: {
+      type: Schema.Types.ObjectId,
+      ref: 'School',
       required: true,
     },
     openedAt: {
@@ -62,9 +68,9 @@ const cashShiftSchema = new Schema<ICashShift>(
   }
 );
 
-cashShiftSchema.index({ seller: 1, status: 1 });
-cashShiftSchema.index({ openedAt: -1 });
-cashShiftSchema.index({ status: 1 });
+cashShiftSchema.index({ school: 1, seller: 1, status: 1 });
+cashShiftSchema.index({ school: 1, openedAt: -1 });
+cashShiftSchema.index({ school: 1, status: 1 });
 
 cashShiftSchema.set('toJSON', {
   transform: (_doc, ret: any) => {

@@ -5,6 +5,7 @@ export type CreditMovementType = 'debt' | 'payment';
 export interface ICreditMovement extends Document {
   client: Types.ObjectId;
   sale: Types.ObjectId;
+  school: Types.ObjectId;
   type: CreditMovementType;
   amount: number;
   balanceAfter: number;
@@ -24,6 +25,11 @@ const creditMovementSchema = new Schema<ICreditMovement>(
     sale: {
       type: Schema.Types.ObjectId,
       ref: 'Sale',
+      required: true,
+    },
+    school: {
+      type: Schema.Types.ObjectId,
+      ref: 'School',
       required: true,
     },
     type: {
@@ -61,10 +67,10 @@ const creditMovementSchema = new Schema<ICreditMovement>(
   }
 );
 
-creditMovementSchema.index({ client: 1, createdAt: -1 });
-creditMovementSchema.index({ sale: 1 });
-creditMovementSchema.index({ type: 1 });
-creditMovementSchema.index({ admin: 1 });
+creditMovementSchema.index({ school: 1, client: 1, createdAt: -1 });
+creditMovementSchema.index({ school: 1, sale: 1 });
+creditMovementSchema.index({ school: 1, type: 1 });
+creditMovementSchema.index({ school: 1, admin: 1 });
 
 creditMovementSchema.set('toJSON', {
   transform: (_doc, ret: any) => {

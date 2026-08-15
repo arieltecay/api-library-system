@@ -79,6 +79,7 @@ export interface SalesSummary {
 }
 
 export async function previewSale(
+  schoolId: string,
   items: Array<{ product: string; quantity: number }>,
   clientId: string | undefined,
   discount: number,
@@ -86,9 +87,9 @@ export async function previewSale(
   amountReceived?: number
 ): Promise<SalePreviewResult> {
   const [products, client, activeShift] = await Promise.all([
-    ProductModel.find({ _id: { $in: items.map(i => i.product) } }).lean(),
-    clientId ? ClientModel.findById(clientId).lean() : Promise.resolve(null),
-    CashShiftModel.findOne({ status: 'open' }).lean(),
+    ProductModel.find({ _id: { $in: items.map(i => i.product) }, school: schoolId }).lean(),
+    clientId ? ClientModel.findOne({ _id: clientId, school: schoolId }).lean() : Promise.resolve(null),
+    CashShiftModel.findOne({ school: schoolId, status: 'open' }).lean(),
   ]);
 
   if (paymentMethod === 'credit' && !client) {
@@ -154,6 +155,7 @@ export async function previewSale(
 }
 
 export async function createSale(
+  schoolId: string,
   sellerId: string,
   cashShiftId: string,
   items: Array<{ product: string; quantity: number }>,
@@ -166,13 +168,13 @@ export async function createSale(
 
   // Default to "consumidor final" client for cash/transfer if not specified
   if (paymentMethod !== 'credit' && !clientId) {
-    const defaultClient = await ClientModel.findOne({ fullName: 'Consumidor Final' }).lean();
+    const defaultClient = await ClientModel.findOne({ fullName: 'Consumidor Final', school: schoolId }).lean();
     if (defaultClient) {
       effectiveClientId = defaultClient._id.toString();
     }
   }
 
-  const preview = await previewSale(items, clientId, discount, paymentMethod, amountReceived);
+  const preview = await previewSale(schoolId, items, clientId, discount, paymentMethod, amountReceived);
 
   const session = await SaleModel.db.startSession();
   session.startTransaction();
@@ -180,7 +182,7 @@ export async function createSale(
   try {
     // Update product stock
     for (const item of items) {
-      const product = await ProductModel.findById(item.product).session(session);
+      const product = await ProductModel.findOne({ _id: item.product, school: schoolId }).session(session);
       if (!product) throw new Error(`Product not found: ${item.product}`);
       if (product.type === 'product') {
         product.stock -= item.quantity;
@@ -189,7 +191,7 @@ export async function createSale(
     }
 
     // Generate sequential receipt number within the transaction
-    const lastNumber = await SaleModel.findOne({}, { number: 1 }).sort({ number: -1 }).session(session);
+    const lastNumber = await SaleModel.findOne({ school: schoolId }, { number: 1 }).sort({ number: -1 }).session(session);
     const nextNumber = (lastNumber?.number ?? 0) + 1;
 
     // Create sale
@@ -213,12 +215,13 @@ export async function createSale(
       client: clientId ?? undefined,
       seller: sellerId,
       cashShift: cashShiftId,
+      school: schoolId,
       settled: paymentMethod !== 'credit',
     }], { session });
 
     let creditMovement;
     if (paymentMethod === 'credit' && clientId) {
-      const client = await ClientModel.findById(clientId).session(session);
+      const client = await ClientModel.findOne({ _id: clientId, school: schoolId }).session(session);
       if (!client) throw new Error('Client not found');
 
       const newBalance = client.balance + preview.total;
@@ -228,6 +231,7 @@ export async function createSale(
       creditMovement = await CreditMovementModel.create([{
         client: clientId,
         sale: sale[0]!._id,
+        school: schoolId,
         type: 'debt',
         amount: preview.total,
         balanceAfter: newBalance,
@@ -249,8 +253,8 @@ export async function createSale(
   }
 }
 
-export async function voidSale(saleId: string, adminId: string, reason: string): Promise<SaleLean> {
-  const sale = await SaleModel.findById(saleId);
+export async function voidSale(schoolId: string, saleId: string, adminId: string, reason: string): Promise<SaleLean> {
+  const sale = await SaleModel.findOne({ _id: saleId, school: schoolId });
   if (!sale) {
     throw new NotFoundError('Venta no encontrada');
   }
@@ -267,7 +271,7 @@ export async function voidSale(saleId: string, adminId: string, reason: string):
   try {
     // Restore stock
     for (const item of sale.items) {
-      const product = await ProductModel.findById(item.product).session(session);
+      const product = await ProductModel.findOne({ _id: item.product, school: schoolId }).session(session);
       if (product && product.type === 'product') {
         product.stock += item.quantity;
         await product.save({ session });
@@ -276,7 +280,7 @@ export async function voidSale(saleId: string, adminId: string, reason: string):
 
     // Reverse credit if applicable
     if (sale.paymentMethod === 'credit' && !sale.settled) {
-      const client = await ClientModel.findById(sale.client).session(session);
+      const client = await ClientModel.findOne({ _id: sale.client, school: schoolId }).session(session);
       if (client) {
         client.balance -= sale.total;
         await client.save({ session });
@@ -284,6 +288,7 @@ export async function voidSale(saleId: string, adminId: string, reason: string):
         await CreditMovementModel.create([{
           client: sale.client,
           sale: sale._id,
+          school: schoolId,
           type: 'payment',
           amount: sale.total,
           balanceAfter: client.balance,
@@ -310,13 +315,14 @@ export async function voidSale(saleId: string, adminId: string, reason: string):
 }
 
 export async function returnSale(
+  schoolId: string,
   saleId: string,
   adminId: string,
   reason: string,
   returnItems: Array<{ productId: string; quantity: number }>,
   method: 'cash' | 'credit'
 ): Promise<SaleResult> {
-  const originalSale = await SaleModel.findById(saleId);
+  const originalSale = await SaleModel.findOne({ _id: saleId, school: schoolId });
   if (!originalSale) {
     throw new NotFoundError('Venta original no encontrada');
   }
@@ -361,7 +367,7 @@ export async function returnSale(
       });
 
       // Restore stock
-      const product = await ProductModel.findById(returnItem.productId).session(session);
+      const product = await ProductModel.findOne({ _id: returnItem.productId, school: schoolId }).session(session);
       if (product && product.type === 'product') {
         product.stock += returnItem.quantity;
         await product.save({ session });
@@ -384,13 +390,14 @@ export async function returnSale(
       client: originalSale.client,
       seller: adminId,
       cashShift: originalSale.cashShift,
+      school: schoolId,
       originalSale: originalSale._id,
       settled: method !== 'credit',
     }], { session });
 
     let creditMovement;
     if (method === 'credit') {
-      const client = await ClientModel.findById(originalSale.client).session(session);
+      const client = await ClientModel.findOne({ _id: originalSale.client, school: schoolId }).session(session);
       if (!client) throw new Error('Client not found');
 
       const newBalance = client.balance - returnTotal;
@@ -400,6 +407,7 @@ export async function returnSale(
       creditMovement = await CreditMovementModel.create([{
         client: originalSale.client,
         sale: returnSale[0]!._id,
+        school: schoolId,
         type: 'payment',
         amount: returnTotal,
         balanceAfter: newBalance,
@@ -413,9 +421,10 @@ export async function returnSale(
       creditMovement = await CreditMovementModel.create([{
         client: originalSale.client,
         sale: returnSale[0]!._id,
+        school: schoolId,
         type: 'payment',
         amount: returnTotal,
-        balanceAfter: (await ClientModel.findById(originalSale.client).session(session))?.balance ?? 0,
+        balanceAfter: (await ClientModel.findOne({ _id: originalSale.client, school: schoolId }).session(session))?.balance ?? 0,
         method: 'cash',
         note: `Devolución en efectivo: ${reason}`,
         admin: adminId,
@@ -437,6 +446,7 @@ export async function returnSale(
 }
 
 export async function listSales(params: {
+  schoolId: string;
   clientId?: string;
   sellerId?: string;
   paymentMethod?: 'cash' | 'transfer' | 'credit';
@@ -450,7 +460,7 @@ export async function listSales(params: {
   sortBy: string;
   sortOrder: 'asc' | 'desc';
 }): Promise<SaleListResult> {
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { school: params.schoolId };
 
   if (params.clientId) filter.client = params.clientId;
   if (params.sellerId) filter.seller = params.sellerId;
@@ -491,8 +501,8 @@ export async function listSales(params: {
   };
 }
 
-export async function getSaleById(id: string): Promise<SaleLean> {
-  const sale = await SaleModel.findById(id)
+export async function getSaleById(schoolId: string, id: string): Promise<SaleLean> {
+  const sale = await SaleModel.findOne({ _id: id, school: schoolId })
     .populate('client', 'fullName balance')
     .populate('seller', 'name role')
     .lean();
@@ -502,7 +512,7 @@ export async function getSaleById(id: string): Promise<SaleLean> {
   return withId(sale) as SaleLean;
 }
 
-export async function getSalesSummary(): Promise<SalesSummary> {
+export async function getSalesSummary(schoolId: string): Promise<SalesSummary> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -511,12 +521,13 @@ export async function getSalesSummary(): Promise<SalesSummary> {
 
   // Today's stats
   const [todaySales, todayReturns] = await Promise.all([
-    SaleModel.find({ createdAt: { $gte: today }, type: 'sale', voided: false }).lean(),
-    SaleModel.find({ createdAt: { $gte: today }, type: 'return', voided: false }).lean(),
+    SaleModel.find({ school: schoolId, createdAt: { $gte: today }, type: 'sale', voided: false }).lean(),
+    SaleModel.find({ school: schoolId, createdAt: { $gte: today }, type: 'return', voided: false }).lean(),
   ]);
 
   // Yesterday's stats for growth
   const yesterdaySalesCount = await SaleModel.countDocuments({
+    school: schoolId,
     createdAt: { $gte: yesterday, $lt: today },
     type: 'sale',
     voided: false,
@@ -527,7 +538,7 @@ export async function getSalesSummary(): Promise<SalesSummary> {
   if (yesterdaySalesCount > 0) {
     salesGrowth = ((salesTodayCount - yesterdaySalesCount) / yesterdaySalesCount) * 100;
   } else if (salesTodayCount > 0) {
-    salesGrowth = 100; // Si ayer hubo 0 y hoy hay, creció un 100% (o infinito, lo seteamos a 100 como base positiva)
+    salesGrowth = 100;
   }
 
   const totalRevenue = todaySales.reduce((acc, sale) => acc + sale.total, 0);

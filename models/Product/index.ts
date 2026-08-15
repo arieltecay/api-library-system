@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, Types } from 'mongoose';
 
 export type ProductType = 'product' | 'service';
 export type ProductUnit = 'unit' | 'sheet' | 'binding';
@@ -14,6 +14,7 @@ export interface IProduct extends Document {
   unit?: ProductUnit;
   code?: string;
   active: boolean;
+  school: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +69,11 @@ const productSchema = new Schema<IProduct>(
       type: String,
       trim: true,
     },
+    school: {
+      type: Schema.Types.ObjectId,
+      ref: 'School',
+      required: true,
+    },
   },
   {
     timestamps: true,
@@ -75,8 +81,8 @@ const productSchema = new Schema<IProduct>(
   }
 );
 
-productSchema.index({ name: 1 });
-productSchema.index({ active: 1, type: 1 });
+productSchema.index({ school: 1, name: 1 });
+productSchema.index({ school: 1, active: 1, type: 1 });
 
 productSchema.set('toJSON', {
   transform: (_doc, ret: any) => {
