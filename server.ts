@@ -18,6 +18,10 @@ import settingsRoutes from './routes/settings/index.js';
 
 const app = express();
 
+// Body parser (must be before CORS / routes)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
 // CORS configuration
 // In production, restrict to specific origins; in development, allow all for flexibility
 const allowedOrigins = env.NODE_ENV === 'production'
