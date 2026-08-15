@@ -1,4 +1,15 @@
 {
-  "framework": "express",
-  "outputDirectory": "."
+  "version": 2,
+  "builds": [
+    {
+      "src": "server.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "server.ts"
+    }
+  ]
 }

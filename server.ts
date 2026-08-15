@@ -72,8 +72,8 @@ export default async function handler(req: import('express').Request, res: impor
   }
 }
 
-// Start server if run directly (Node 22 ESM compatible)
-if (require.main === module) {
+// Start server if run directly (ESM compatible)
+if (import.meta.url === `file://${process.argv[1]}`) {
   const port = env.PORT;
   mongoose.connect(env.MONGODB_URI)
     .then(() => {
