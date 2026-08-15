@@ -106,7 +106,7 @@ export async function getMe(userId: string): Promise<{ id: string; name: string;
 
 function generateTokens(userId: string, role: UserRole, schoolId: string, posId?: string): AuthTokens {
   const accessToken = jwt.sign({ sub: userId, role, schoolId, posId }, env.JWT_SECRET, {
-    expiresIn: '15m',
+    expiresIn: '12h',
   });
   const refreshToken = jwt.sign({ sub: userId, role, schoolId, posId }, env.JWT_SECRET, {
     expiresIn: env.JWT_EXPIRES_IN as '7d',
