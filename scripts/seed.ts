@@ -7,6 +7,8 @@ import { ClientModel } from '../models/Client/index.js';
 import { SaleModel } from '../models/Sale/index.js';
 import { CashShiftModel } from '../models/CashShift/index.js';
 import { CreditMovementModel } from '../models/CreditMovement/index.js';
+import { SchoolModel } from '../models/School/index.js';
+import { PosModel } from '../models/Pos/index.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -207,44 +209,65 @@ async function seedAll(): Promise<void> {
 
   // Reset
   console.log('\nLimpiando colecciones...');
-  const [u, p, c, s, sh, cm] = await Promise.all([
+  const [u, p, c, s, sh, cm, sc, po] = await Promise.all([
     UserModel.deleteMany({}),
     ProductModel.deleteMany({}),
     ClientModel.deleteMany({}),
     SaleModel.deleteMany({}),
     CashShiftModel.deleteMany({}),
     CreditMovementModel.deleteMany({}),
+    SchoolModel.deleteMany({}),
+    PosModel.deleteMany({}),
   ]);
-  console.log(`  Eliminados: ${u.deletedCount} users, ${p.deletedCount} products, ${c.deletedCount} clients, ${s.deletedCount} sales, ${sh.deletedCount} shifts, ${cm.deletedCount} movements`);
+  console.log(`  Eliminados: ${u.deletedCount} users, ${p.deletedCount} products, ${c.deletedCount} clients, ${s.deletedCount} sales, ${sh.deletedCount} shifts, ${cm.deletedCount} movements, ${sc.deletedCount} schools, ${po.deletedCount} pos`);
+
+  // Create School and Pos first
+  console.log('\n[0/6] Creando escuela y POS...');
+  const school = await SchoolModel.create({
+    name: 'Escuela Principal',
+    code: 'EP1',
+    address: 'Av. Principal 123',
+    phone: '11 1234-5678',
+    email: 'admin@escuela.edu',
+    active: true,
+  });
+  const pos = await PosModel.create({
+    name: 'POS Principal',
+    code: 'POS1',
+    school: school._id,
+    active: true,
+  });
+  console.log(`  Escuela: ${school.name} (${school._id})`);
+  console.log(`  POS: ${pos.name} (${pos._id})`);
 
   // 1. Users
   console.log('\n[1/6] Creando usuarios...');
-  const users = await seedUsers();
+  const users = await seedUsers(school._id, pos._id);
   log('Usuarios', users.length);
 
   // 2. Products
   console.log('\n[2/6] Creando productos...');
-  const products = await seedProducts();
+  const products = await seedProducts(school._id);
   log('Productos', products.length);
 
   // 3. Clients
   console.log('\n[3/6] Creando clientes...');
-  const clients = await seedClients();
+  const clients = await seedClients(school._id);
   log('Clientes', clients.length);
 
   // 4. Cash Shifts
   console.log('\n[4/6] Creando turnos de caja...');
-  const cashShifts = await seedCashShifts(users);
+  const cashShifts = await seedCashShifts(school._id, users);
   log('Turnos', cashShifts.length);
 
   // 5. Sales
   console.log('\n[5/6] Creando ventas...');
-  const creditSales = await seedSales(products, clients, users, cashShifts);
+  const creditSales = await seedSales(school._id, products, clients, users, cashShifts);
   log('Ventas con credito', creditSales.length);
 
   // 6. Credit Movements
   console.log('\n[6/6] Creando movimientos de credito...');
-  const movementsCount = await seedCreditMovements(creditSales, clients, users);
+  const movementsCount = await seedCreditMovements(school._id, creditSales, clients, users);
   log('Movimientos', movementsCount);
 
   console.log('\n====================================');
@@ -257,7 +280,7 @@ async function seedAll(): Promise<void> {
 // seedUsers
 // ---------------------------------------------------------------------------
 
-async function seedUsers(): Promise<Array<{ id: string; role: 'admin' | 'seller' }>> {
+async function seedUsers(schoolId: mongoose.Types.ObjectId, posId: mongoose.Types.ObjectId): Promise<Array<{ id: string; role: 'admin' | 'seller' }>> {
   const passwordHash = await bcrypt.hash('admin123', env.BCRYPT_ROUNDS);
   const pinHashAdmin = await bcrypt.hash('1234', env.BCRYPT_ROUNDS);
   const pinHashSeller1 = await bcrypt.hash('1111', env.BCRYPT_ROUNDS);
@@ -265,10 +288,10 @@ async function seedUsers(): Promise<Array<{ id: string; role: 'admin' | 'seller'
   const pinHashSeller3 = await bcrypt.hash('3333', env.BCRYPT_ROUNDS);
 
   const usersData = [
-    { name: 'Administrador', email: 'admin@librarysystem.com', passwordHash, pinHash: pinHashAdmin, role: 'admin', active: true, lastLoginAt: new Date() },
-    { name: 'Maria Vendedora', email: 'maria@librarysystem.com', passwordHash, pinHash: pinHashSeller1, role: 'seller', active: true, lastLoginAt: new Date() },
-    { name: 'Carlos Vendedor', email: 'carlos@librarysystem.com', passwordHash, pinHash: pinHashSeller2, role: 'seller', active: true, lastLoginAt: new Date() },
-    { name: 'Lucia Vendedora', email: 'lucia@librarysystem.com', passwordHash, pinHash: pinHashSeller3, role: 'seller', active: true, lastLoginAt: null },
+    { name: 'Administrador', email: 'admin@librarysystem.com', passwordHash, pinHash: pinHashAdmin, role: 'admin', active: true, lastLoginAt: new Date(), school: schoolId, pos: posId },
+    { name: 'Maria Vendedora', email: 'maria@librarysystem.com', passwordHash, pinHash: await bcrypt.hash('1111', env.BCRYPT_ROUNDS), role: 'seller', active: true, lastLoginAt: new Date(), school: schoolId, pos: posId },
+    { name: 'Carlos Vendedor', email: 'carlos@librarysystem.com', passwordHash, pinHash: await bcrypt.hash('2222', env.BCRYPT_ROUNDS), role: 'seller', active: true, lastLoginAt: new Date(), school: schoolId, pos: posId },
+    { name: 'Lucia Vendedora', email: 'lucia@librarysystem.com', passwordHash, pinHash: await bcrypt.hash('3333', env.BCRYPT_ROUNDS), role: 'seller', active: true, lastLoginAt: null, school: schoolId, pos: posId },
   ];
 
   await UserModel.collection.insertMany(usersData);
@@ -280,7 +303,7 @@ async function seedUsers(): Promise<Array<{ id: string; role: 'admin' | 'seller'
 // seedProducts
 // ---------------------------------------------------------------------------
 
-async function seedProducts() {
+async function seedProducts(schoolId: mongoose.Types.ObjectId) {
   const rawData = buildProducts();
   let prodSeq = 0;
   let srvSeq = 0;
@@ -298,6 +321,7 @@ async function seedProducts() {
       minStock: p.minStock,
       unit: p.unit,
       active: true,
+      school: schoolId,
     };
   });
   await ProductModel.collection.insertMany(cleaned);
@@ -308,7 +332,7 @@ async function seedProducts() {
 // seedClients
 // ---------------------------------------------------------------------------
 
-async function seedClients() {
+async function seedClients(schoolId: mongoose.Types.ObjectId) {
   const rawClients = buildClients();
   await ClientModel.collection.insertMany(
     rawClients.map(c => ({
@@ -318,6 +342,7 @@ async function seedClients() {
       isDefault: c.dni === '0',
       balance: 0,
       active: true,
+      school: schoolId,
     })),
   );
   return await ClientModel.find({}).lean();
@@ -329,7 +354,7 @@ async function seedClients() {
 
 interface ShiftResult { id: string; sellerId: string; openedAt: Date; status: 'open' | 'closed'; }
 
-async function seedCashShifts(users: Array<{ id: string; role: 'admin' | 'seller' }>): Promise<ShiftResult[]> {
+async function seedCashShifts(schoolId: mongoose.Types.ObjectId, users: Array<{ id: string; role: 'admin' | 'seller' }>): Promise<ShiftResult[]> {
   const sellers = users.filter(u => u.role === 'seller');
 
   // 25 closed shifts over last 30 days
@@ -345,6 +370,7 @@ async function seedCashShifts(users: Array<{ id: string; role: 'admin' | 'seller
 
     closedShiftsData.push({
       seller: new mongoose.Types.ObjectId(seller.id),
+      school: schoolId,
       openedAt,
       closedAt,
       openingAmount,
@@ -363,6 +389,7 @@ async function seedCashShifts(users: Array<{ id: string; role: 'admin' | 'seller
   nowOpen.setHours(8, 0, 0, 0);
   await CashShiftModel.collection.insertOne({
     seller: new mongoose.Types.ObjectId(activeSeller.id),
+    school: schoolId,
     openedAt: nowOpen,
     openingAmount: 5000,
     status: 'open',
@@ -384,6 +411,7 @@ async function seedCashShifts(users: Array<{ id: string; role: 'admin' | 'seller
 interface CreditSaleResult { saleId: mongoose.Types.ObjectId; clientId: string; total: number; createdAt: Date; }
 
 async function seedSales(
+  schoolId: mongoose.Types.ObjectId,
   products: any[],
   clients: any[],
   users: Array<{ id: string; role: 'admin' | 'seller' }>,
@@ -477,6 +505,7 @@ async function seedSales(
       client: client._id,
       seller: new mongoose.Types.ObjectId(shift.sellerId),
       cashShift: new mongoose.Types.ObjectId(shift.id),
+      school: schoolId,
       settled: paymentMethod !== 'credit',
       settledAt: paymentMethod !== 'credit' ? saleDate : undefined,
       voided: isVoided,
@@ -528,6 +557,7 @@ async function seedSales(
 // ---------------------------------------------------------------------------
 
 async function seedCreditMovements(
+  schoolId: mongoose.Types.ObjectId,
   creditSales: CreditSaleResult[],
   clients: any[],
   users: Array<{ id: string; role: 'admin' | 'seller' }>,
@@ -559,6 +589,7 @@ async function seedCreditMovements(
     movements.push({
       client: new mongoose.Types.ObjectId(clientId),
       sale: firstSale.saleId,
+      school: schoolId,
       type: 'debt',
       amount: totalDebt,
       balanceAfter: totalDebt,
@@ -577,6 +608,7 @@ async function seedCreditMovements(
       movements.push({
         client: new mongoose.Types.ObjectId(clientId),
         sale: firstSale.saleId,
+        school: schoolId,
         type: 'payment',
         amount: paymentAmount,
         balanceAfter: remainingBalance,
