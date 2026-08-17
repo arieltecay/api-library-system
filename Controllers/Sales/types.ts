@@ -11,7 +11,7 @@ export const previewSaleSchema = z.object({
     clientId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID de cliente inválido').optional(),
     discount: z.number().min(0).default(0),
     paymentMethod: z.enum(['cash', 'transfer', 'credit']).default('cash'),
-    amountReceived: z.number().min(0),
+    amountReceived: z.number().min(0).optional(),
   }).refine((data) => data.paymentMethod !== 'credit' || data.clientId, {
     message: 'Cliente requerido para venta a crédito',
     path: ['clientId'],
@@ -24,7 +24,7 @@ export const createSaleSchema = z.object({
     clientId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID de cliente inválido').optional(),
     discount: z.number().min(0).default(0),
     paymentMethod: z.enum(['cash', 'transfer', 'credit']).default('cash'),
-    amountReceived: z.number().min(0),
+    amountReceived: z.number().min(0).optional(),
   }).refine((data) => data.paymentMethod !== 'credit' || data.clientId, {
     message: 'Cliente requerido para venta a crédito',
     path: ['clientId'],
