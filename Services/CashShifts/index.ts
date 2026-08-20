@@ -1,23 +1,15 @@
 import { CashShiftModel } from '../../models/CashShift/index.js';
 import type { CashShiftLean } from '../../models/CashShift/index.js';
-import { CashShiftStatus } from '../../models/CashShift/index.js';
 import { SaleModel } from '../../models/Sale/index.js';
+import { CashMovementModel } from '../../models/CashMovement/index.js';
 import { NotFoundError, ConflictError, ValidationError } from '../../utils/errors.js';
 import { withId, withIds } from '../../utils/lean.js';
-
-export interface CashShiftListResult {
-  items: CashShiftLean[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
-
-export interface CloseCashShiftResult {
-  cashShift: CashShiftLean;
-  expectedAmount: number;
-  difference: number;
-}
+import type {
+  CashShiftListResult,
+  CloseCashShiftResult,
+  DailySummary,
+  ListCashShiftsParams,
+} from './types.js';
 
 export async function openCashShift(schoolId: string, sellerId: string, openingAmount: number): Promise<CashShiftLean> {
   const existing = await CashShiftModel.findOne({ seller: sellerId, school: schoolId, status: 'open' }).lean();
@@ -58,7 +50,7 @@ export async function closeCashShift(
     throw new ConflictError('El turno ya está cerrado');
   }
 
-  // Calculate expected amount
+  // Calculate expected amount from sales
   const sales = await SaleModel.find({
     cashShift: cashShift._id,
     voided: false,
@@ -67,7 +59,19 @@ export async function closeCashShift(
 
   const cashSales = sales.filter(s => s.paymentMethod === 'cash');
   const cashTotal = cashSales.reduce((sum, s) => sum + s.total, 0);
-  const expectedAmount = cashShift.openingAmount + cashTotal;
+
+  // Calculate movements
+  const movements = await CashMovementModel.find({ cashShift: cashShift._id, school: schoolId }).lean();
+  const cashInTotal = movements
+    .filter(m => m.type === 'in')
+    .reduce((sum, m) => sum + m.amount, 0);
+  const cashOutTotal = movements
+    .filter(m => m.type === 'out')
+    .reduce((sum, m) => sum + m.amount, 0);
+  const netMovements = cashInTotal - cashOutTotal;
+
+  // Expected cash = opening + cash sales - cash out + cash in
+  const expectedAmount = cashShift.openingAmount + cashTotal - cashOutTotal + cashInTotal;
   const difference = closingAmount - expectedAmount;
 
   // Validate difference
@@ -87,6 +91,9 @@ export async function closeCashShift(
     cashShift: cashShift.toJSON() as CashShiftLean,
     expectedAmount,
     difference,
+    cashInTotal,
+    cashOutTotal,
+    netMovements,
   };
 }
 
@@ -166,6 +173,10 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
     productsSold: number;
     avgTicket: number;
     expectedCash: number;
+    cashInTotal: number;
+    cashOutTotal: number;
+    netMovements: number;
+    movementsCount: number;
   } | null;
 }> {
   const cashShift = await CashShiftModel.findOne({ seller: sellerId, school: schoolId, status: 'open' }).lean();
@@ -173,11 +184,14 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
     return { cashShift: null, aggregated: null };
   }
 
-  const sales = await SaleModel.find({
-    cashShift: cashShift._id,
-    voided: false,
-    type: 'sale',
-  }).lean();
+  const [sales, movements] = await Promise.all([
+    SaleModel.find({
+      cashShift: cashShift._id,
+      voided: false,
+      type: 'sale',
+    }).lean(),
+    CashMovementModel.find({ cashShift: cashShift._id, school: schoolId }).lean(),
+  ]);
 
   const cashSales = sales.filter(s => s.paymentMethod === 'cash');
   const transferSales = sales.filter(s => s.paymentMethod === 'transfer');
@@ -189,7 +203,18 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
   const salesCount = sales.length;
   const productsSold = sales.reduce((sum, s) => sum + s.items.reduce((isum, i) => isum + i.quantity, 0), 0);
   const avgTicket = salesCount > 0 ? sales.reduce((sum, s) => sum + s.total, 0) / salesCount : 0;
-  const expectedCash = cashShift.openingAmount + cashTotal;
+
+  const cashInTotal = movements
+    .filter(m => m.type === 'in')
+    .reduce((sum, m) => sum + m.amount, 0);
+  const cashOutTotal = movements
+    .filter(m => m.type === 'out')
+    .reduce((sum, m) => sum + m.amount, 0);
+  const netMovements = cashInTotal - cashOutTotal;
+  const movementsCount = movements.length;
+
+  // Expected cash = opening + cash sales - cash out + cash in
+  const expectedCash = cashShift.openingAmount + cashTotal - cashOutTotal + cashInTotal;
 
   return {
     cashShift: withId(cashShift) as CashShiftLean,
@@ -201,22 +226,12 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
       productsSold,
       avgTicket,
       expectedCash,
+      cashInTotal,
+      cashOutTotal,
+      netMovements,
+      movementsCount,
     },
   };
-}
-
-export interface DailySummary {
-  date: string;
-  totalOpening: number;
-  cashSales: number;
-  returns: number;
-  creditPayments: number;
-  totalExpected: number;
-  finalCount: number;
-  difference: number;
-  shiftsWithDifference: number;
-  totalShifts: number;
-  pendingShifts: Array<{ sellerName: string; id: string }>;
 }
 
 export async function getDailySummary(schoolId: string, date?: Date): Promise<DailySummary> {
@@ -226,7 +241,7 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
   const end = new Date(target);
   end.setHours(23, 59, 59, 999);
 
-  const [shifts, sales, creditMovements] = await Promise.all([
+  const [shifts, sales, creditMovements, cashMovements] = await Promise.all([
     CashShiftModel.find({ school: schoolId, openedAt: { $gte: start, $lte: end } })
       .populate({ path: 'seller', select: 'name' })
       .lean(),
@@ -234,17 +249,31 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
     import('../../models/CreditMovement/index.js').then(m =>
       m.CreditMovementModel.find({ school: schoolId, createdAt: { $gte: start, $lte: end }, type: 'payment' }).lean()
     ),
+    CashMovementModel.find({ school: schoolId, createdAt: { $gte: start, $lte: end } }).lean(),
   ]);
 
   const totalOpening = shifts.reduce((s, sh) => s + sh.openingAmount, 0);
   const cashSalesTotal = sales
     .filter(s => s.paymentMethod === 'cash')
     .reduce((s, sale) => s + sale.total, 0);
+  const transferSalesTotal = sales
+    .filter(s => s.paymentMethod === 'transfer')
+    .reduce((s, sale) => s + sale.total, 0);
   const returnsTotal = sales
     .filter(s => (s as any).type === 'return')
     .reduce((s, sale) => s + sale.total, 0);
   const creditPaymentsTotal = creditMovements.reduce((s, m) => s + m.amount, 0);
-  const totalExpected = totalOpening + cashSalesTotal - returnsTotal + creditPaymentsTotal;
+
+  const cashInTotal = cashMovements
+    .filter(m => m.type === 'in')
+    .reduce((sum, m) => sum + m.amount, 0);
+  const cashOutTotal = cashMovements
+    .filter(m => m.type === 'out')
+    .reduce((sum, m) => sum + m.amount, 0);
+  const netMovements = cashInTotal - cashOutTotal;
+
+  // totalExpected = opening + cash sales - returns + credit payments - cash out + cash in
+  const totalExpected = totalOpening + cashSalesTotal - returnsTotal + creditPaymentsTotal - cashOutTotal + cashInTotal;
 
   const closedShifts = shifts.filter(s => s.status === 'closed');
   const finalCount = closedShifts.reduce((s, sh) => s + (sh.closingAmount ?? 0), 0);
@@ -258,8 +287,12 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
     date: start.toISOString().split('T')[0] as string,
     totalOpening,
     cashSales: cashSalesTotal,
+    transferSales: transferSalesTotal,
     returns: returnsTotal,
     creditPayments: creditPaymentsTotal,
+    cashInTotal,
+    cashOutTotal,
+    netMovements,
     totalExpected,
     finalCount,
     difference,

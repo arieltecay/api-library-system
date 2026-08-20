@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as cashShiftsService from '../../Services/CashShifts/index.js';
+import * as cashMovementsController from '../../Controllers/CashMovements/index.js';
 
 export async function openCashShift(req: Request, res: Response): Promise<void> {
   if (!req.user) throw new Error('Usuario no autenticado');
@@ -53,3 +54,8 @@ export async function getDailySummary(req: Request, res: Response): Promise<void
   const summary = await cashShiftsService.getDailySummary(req.schoolId!, date);
   res.json(summary);
 }
+
+// Cash Movement endpoints
+export const createCashMovement = cashMovementsController.createCashMovement;
+export const getCashMovementsByShift = cashMovementsController.getCashMovementsByShift;
+export const getCashMovementsAggregated = cashMovementsController.getCashMovementsAggregated;

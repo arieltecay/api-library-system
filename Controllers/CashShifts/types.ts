@@ -29,6 +29,34 @@ export const listCashShiftsSchema = z.object({
   }),
 });
 
+// Cash Movement schemas
+export const createCashMovementSchema = z.object({
+  params: z.object({
+    cashShiftId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID de turno inválido'),
+  }),
+  body: z.object({
+    type: z.enum(['in', 'out']),
+    category: z.enum(['lunch', 'supplies', 'personal_withdrawal', 'change', 'expense', 'other']),
+    amount: z.number().positive('El monto debe ser mayor a 0'),
+    description: z.string().min(3, 'Descripción obligatoria (mínimo 3 caracteres)').max(500),
+  }),
+});
+
+export const getCashMovementsByShiftSchema = z.object({
+  params: z.object({
+    cashShiftId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID de turno inválido'),
+  }),
+});
+
+export const getCashMovementsAggregatedSchema = z.object({
+  params: z.object({
+    cashShiftId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID de turno inválido'),
+  }),
+});
+
 export type OpenCashShiftInput = z.infer<typeof openCashShiftSchema>['body'];
 export type CloseCashShiftInput = z.infer<typeof closeCashShiftSchema>['body'];
 export type ListCashShiftsInput = z.infer<typeof listCashShiftsSchema>['query'];
+export type CreateCashMovementInput = z.infer<typeof createCashMovementSchema>;
+export type GetCashMovementsByShiftInput = z.infer<typeof getCashMovementsByShiftSchema>;
+export type GetCashMovementsAggregatedInput = z.infer<typeof getCashMovementsAggregatedSchema>;
