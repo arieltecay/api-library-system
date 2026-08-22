@@ -60,7 +60,7 @@ const requireAdminOrSeller = (req: any, res: any, next: any) => {
 };
 
 const validateProduct = (req: any, res: any, next: any) => {
-  const { name, type, price, stock } = req.body;
+  const { name, type, price, cost, stock } = req.body;
   
   if (!name || !type || price === undefined || stock === undefined) {
     return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Datos de entrada inválidos' });
@@ -72,6 +72,10 @@ const validateProduct = (req: any, res: any, next: any) => {
   
   if (price < 0) {
     return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'El precio no puede ser negativo' });
+  }
+  
+  if (cost < 0) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'El costo no puede ser negativo' });
   }
   
   if (stock < 0) {
@@ -749,6 +753,10 @@ app.get('/cash-shifts/active', authMiddleware, (req, res) => {
       cashOutTotal: 0,
       netMovements: 0,
       movementsCount: 0,
+      revenue: 0,
+      cogs: 0,
+      grossProfit: 0,
+      grossMarginPercent: 0,
     },
   });
 });
@@ -762,6 +770,10 @@ app.post('/cash-shifts/:id/close', authMiddleware, validateId, validateCashShift
     status: 'closed',
     closedAt: new Date().toISOString(),
     note: req.body.note,
+    revenue: 0,
+    cogs: 0,
+    grossProfit: 0,
+    grossMarginPercent: 0,
   });
 });
 
@@ -792,6 +804,10 @@ app.get('/cash-shifts/daily-summary', (req, res) => {
     shiftsWithDifference: 0,
     totalShifts: 1,
     pendingShifts: [],
+    revenue: 0,
+    cogs: 0,
+    grossProfit: 0,
+    grossMarginPercent: 0,
   });
 });
 

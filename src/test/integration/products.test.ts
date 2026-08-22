@@ -122,6 +122,38 @@ describe('Products Integration Tests', () => {
 
       expect(res.body).toHaveProperty('error', 'VALIDATION_ERROR');
     });
+
+    it('should return 400 for negative cost', async () => {
+      const res = await testApp
+        .post('/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Test Product',
+          type: 'product',
+          price: 1000,
+          cost: -10,
+          stock: 10,
+        })
+        .expect(400);
+
+      expect(res.body).toHaveProperty('error', 'VALIDATION_ERROR');
+    });
+
+    it('should create product with cost', async () => {
+      const res = await testApp
+        .post('/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Test Product',
+          type: 'product',
+          price: 1000,
+          cost: 100,
+          stock: 10,
+        })
+        .expect(201);
+
+      expect(res.body).toHaveProperty('cost', 100);
+    });
   });
 
   describe('GET /products', () => {

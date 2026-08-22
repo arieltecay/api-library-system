@@ -16,6 +16,7 @@ export interface SalePreviewResult {
     type: 'product' | 'service';
     quantity: number;
     unitPrice: number;
+    unitCost?: number;
     subtotal: number;
   }>;
   subtotal: number;
@@ -38,6 +39,7 @@ export interface SaleItemInfo {
   type: 'product' | 'service';
   quantity: number;
   unitPrice: number;
+  unitCost?: number;
   subtotal: number;
 }
 
@@ -121,6 +123,7 @@ export async function previewSale(
       type: product.type,
       quantity: item.quantity,
       unitPrice,
+      unitCost: product.cost ?? 0,
       subtotal: itemSubtotal,
     });
   }
@@ -202,6 +205,7 @@ export async function createSale(
         type: i.type,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
+        unitCost: i.unitCost,
         subtotal: i.subtotal,
       })),
       number: nextNumber,
@@ -363,6 +367,7 @@ export async function returnSale(
         type: originalItem.type,
         quantity: returnItem.quantity,
         unitPrice: originalItem.unitPrice,
+        unitCost: originalItem.unitCost ?? 0,
         subtotal: itemSubtotal,
       });
 

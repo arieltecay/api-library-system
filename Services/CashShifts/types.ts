@@ -15,6 +15,10 @@ export interface CloseCashShiftResult {
   cashInTotal: number;
   cashOutTotal: number;
   netMovements: number;
+  revenue: number;
+  cogs: number;
+  grossProfit: number;
+  grossMarginPercent: number | null;
 }
 
 export interface DailySummary {
@@ -33,6 +37,10 @@ export interface DailySummary {
   shiftsWithDifference: number;
   totalShifts: number;
   pendingShifts: Array<{ sellerName: string; id: string }>;
+  revenue: number;
+  cogs: number;
+  grossProfit: number;
+  grossMarginPercent: number | null;
 }
 
 export interface ListCashShiftsParams {

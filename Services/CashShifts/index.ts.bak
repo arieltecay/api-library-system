@@ -28,38 +28,6 @@ export async function openCashShift(schoolId: string, sellerId: string, openingA
   return cashShift.toJSON() as CashShiftLean;
 }
 
-
-interface Profitability {
-  revenue: number;
-  cogs: number;
-  grossProfit: number;
-  grossMarginPercent: number | null;
-}
-
-function summarizeProfitability(
-  sales: Array<{ type: string; total: number; items: Array<{ unitCost?: number; quantity: number }> }>
-): Profitability {
-  let revenue = 0;
-  let cost = 0;
-
-  for (const sale of sales) {
-    if (sale.type === 'sale') {
-      revenue += sale.total;
-      cost += cogs(sale.items);
-    } else if (sale.type === 'return') {
-      revenue -= sale.total;
-      cost -= cogs(sale.items);
-    }
-  }
-
-  return {
-    revenue,
-    cogs: cost,
-    grossProfit: grossProfit(revenue, cost),
-    grossMarginPercent: grossMarginPercent(revenue, cost),
-  };
-}
-
 export async function getActiveCashShift(schoolId: string, sellerId: string): Promise<CashShiftLean | null> {
   const cashShift = await CashShiftModel.findOne({ seller: sellerId, school: schoolId, status: 'open' }).lean();
   return cashShift ? (withId(cashShift) as CashShiftLean) : null;
@@ -83,18 +51,15 @@ export async function closeCashShift(
     throw new ConflictError('El turno ya está cerrado');
   }
 
-  // Get all sales (including returns) from the cash shift
-  const allSales = await SaleModel.find({
+  // Calculate expected amount from sales
+  const sales = await SaleModel.find({
     cashShift: cashShift._id,
     voided: false,
+    type: 'sale',
   }).lean();
 
-  const sales = allSales.filter(s => s.type === 'sale');
   const cashSales = sales.filter(s => s.paymentMethod === 'cash');
   const cashTotal = cashSales.reduce((sum, s) => sum + s.total, 0);
-
-  // Calculate profitability
-  const profitability = summarizeProfitability(allSales);
 
   // Calculate movements
   const movements = await CashMovementModel.find({ cashShift: cashShift._id, school: schoolId }).lean();
@@ -130,10 +95,6 @@ export async function closeCashShift(
     cashInTotal,
     cashOutTotal,
     netMovements,
-    revenue: profitability.revenue,
-    cogs: profitability.cogs,
-    grossProfit: profitability.grossProfit,
-    grossMarginPercent: profitability.grossMarginPercent,
   };
 }
 
@@ -217,10 +178,6 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
     cashOutTotal: number;
     netMovements: number;
     movementsCount: number;
-    revenue: number;
-    cogs: number;
-    grossProfit: number;
-    grossMarginPercent: number | null;
   } | null;
 }> {
   const cashShift = await CashShiftModel.findOne({ seller: sellerId, school: schoolId, status: 'open' }).lean();
@@ -228,19 +185,20 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
     return { cashShift: null, aggregated: null };
   }
 
-  const [allSales, movements] = await Promise.all([
+  const [sales, movements] = await Promise.all([
     SaleModel.find({
       cashShift: cashShift._id,
       voided: false,
+      type: 'sale',
     }).lean(),
     CashMovementModel.find({ cashShift: cashShift._id, school: schoolId }).lean(),
   ]);
 
-  const sales = allSales.filter(s => s.type === 'sale');
-  const transferSales = allSales.filter(s => s.paymentMethod === 'transfer');
-  const creditSales = allSales.filter(s => s.paymentMethod === 'credit');
+  const cashSales = sales.filter(s => s.paymentMethod === 'cash');
+  const transferSales = sales.filter(s => s.paymentMethod === 'transfer');
+  const creditSales = sales.filter(s => s.paymentMethod === 'credit');
 
-  const cashTotal = sales.reduce((sum, s) => sum + s.total, 0);
+  const cashTotal = cashSales.reduce((sum, s) => sum + s.total, 0);
   const transferTotal = transferSales.reduce((sum, s) => sum + s.total, 0);
   const creditTotal = creditSales.reduce((sum, s) => sum + s.total, 0);
   const salesCount = sales.length;
@@ -259,9 +217,6 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
   // Expected cash = opening + cash sales - cash out + cash in
   const expectedCash = cashShift.openingAmount + cashTotal - cashOutTotal + cashInTotal;
 
-  // Profitability summary
-  const profitability = summarizeProfitability(allSales);
-
   return {
     cashShift: withId(cashShift) as CashShiftLean,
     aggregated: {
@@ -276,10 +231,6 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
       cashOutTotal,
       netMovements,
       movementsCount,
-      revenue: profitability.revenue,
-      cogs: profitability.cogs,
-      grossProfit: profitability.grossProfit,
-      grossMarginPercent: profitability.grossMarginPercent,
     },
   };
 }
@@ -322,9 +273,6 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
     .reduce((sum, m) => sum + m.amount, 0);
   const netMovements = cashInTotal - cashOutTotal;
 
-  // Profitability summary
-  const profitability = summarizeProfitability(sales);
-
   // totalExpected = opening + cash sales - returns + credit payments - cash out + cash in
   const totalExpected = totalOpening + cashSalesTotal - returnsTotal + creditPaymentsTotal - cashOutTotal + cashInTotal;
 
@@ -346,10 +294,6 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
     cashInTotal,
     cashOutTotal,
     netMovements,
-    revenue: profitability.revenue,
-    cogs: profitability.cogs,
-    grossProfit: profitability.grossProfit,
-    grossMarginPercent: profitability.grossMarginPercent,
     totalExpected,
     finalCount,
     difference,

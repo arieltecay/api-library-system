@@ -11,6 +11,7 @@ export interface ISale extends Document {
     type: 'product' | 'service';
     quantity: number;
     unitPrice: number;
+    unitCost?: number;
     subtotal: number;
   }>;
   number: number;
@@ -43,6 +44,7 @@ const saleSchema = new Schema<ISale>(
         type: { type: String, enum: ['product', 'service'], required: true },
         quantity: { type: Number, required: true, min: 1 },
         unitPrice: { type: Number, required: true, min: 0 },
+        unitCost: { type: Number, min: 0, default: 0 },
         subtotal: { type: Number, required: true, min: 0 },
       },
     ],

@@ -107,6 +107,10 @@ describe('CashShifts Integration Tests', () => {
 
       expect(res.body).toHaveProperty('cashShift');
       expect(res.body).toHaveProperty('aggregated');
+      expect(res.body.aggregated).toHaveProperty('revenue');
+      expect(res.body.aggregated).toHaveProperty('cogs');
+      expect(res.body.aggregated).toHaveProperty('grossProfit');
+      expect(res.body.aggregated).toHaveProperty('grossMarginPercent');
     });
   });
 
@@ -243,6 +247,10 @@ describe('CashShifts Integration Tests', () => {
       expect(res.body).toHaveProperty('totalExpected');
       expect(res.body).toHaveProperty('finalCount');
       expect(res.body).toHaveProperty('difference');
+      expect(res.body).toHaveProperty('revenue');
+      expect(res.body).toHaveProperty('cogs');
+      expect(res.body).toHaveProperty('grossProfit');
+      expect(res.body).toHaveProperty('grossMarginPercent');
     });
 
     it('should support date query parameter', async () => {
