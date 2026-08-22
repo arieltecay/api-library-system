@@ -25,18 +25,16 @@ const productSchema = new Schema<IProduct>(
       type: String,
       required: true,
       trim: true,
-      maxlength: 120,
+      maxlength: 150,
     },
     description: {
       type: String,
       trim: true,
-      maxlength: 500,
     },
     type: {
       type: String,
       enum: ['product', 'service'],
       required: true,
-      default: 'product',
     },
     price: {
       type: Number,
@@ -49,25 +47,25 @@ const productSchema = new Schema<IProduct>(
     },
     stock: {
       type: Number,
-      required: true,
       default: 0,
       min: 0,
     },
     minStock: {
       type: Number,
+      default: 10,
       min: 0,
     },
     unit: {
       type: String,
       enum: ['unit', 'sheet', 'binding'],
     },
-    active: {
-      type: Boolean,
-      default: true,
-    },
     code: {
       type: String,
       trim: true,
+    },
+    active: {
+      type: Boolean,
+      default: true,
     },
     school: {
       type: Schema.Types.ObjectId,
@@ -83,9 +81,11 @@ const productSchema = new Schema<IProduct>(
 
 productSchema.index({ school: 1, name: 1 });
 productSchema.index({ school: 1, active: 1, type: 1 });
+productSchema.index({ school: 1, code: 1 });
 
 productSchema.set('toJSON', {
-  transform: (_doc, ret: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transform: (_doc: unknown, ret: any) => {
     ret.id = String(ret._id);
     delete ret._id;
     delete ret.__v;
@@ -97,3 +97,5 @@ export const ProductModel = mongoose.model<IProduct>('Product', productSchema);
 
 export type ProductDocument = IProduct;
 export type ProductLean = mongoose.FlattenMaps<IProduct> & { id: string };
+
+// Types already exported above

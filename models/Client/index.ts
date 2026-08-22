@@ -18,18 +18,16 @@ const clientSchema = new Schema<IClient>(
       type: String,
       required: true,
       trim: true,
-      maxlength: 120,
+      maxlength: 150,
     },
     phone: {
       type: String,
       trim: true,
-      maxlength: 30,
     },
     dni: {
       type: String,
       required: true,
       trim: true,
-      maxlength: 20,
     },
     isDefault: {
       type: Boolean,
@@ -38,6 +36,7 @@ const clientSchema = new Schema<IClient>(
     balance: {
       type: Number,
       default: 0,
+      min: 0,
     },
     active: {
       type: Boolean,
@@ -55,13 +54,14 @@ const clientSchema = new Schema<IClient>(
   }
 );
 
-clientSchema.index({ school: 1, fullName: 1 });
 clientSchema.index({ school: 1, dni: 1 }, { unique: true });
+clientSchema.index({ school: 1, fullName: 1 });
 clientSchema.index({ school: 1, balance: 1 });
-clientSchema.index({ school: 1, isDefault: 1 });
+clientSchema.index({ school: 1, active: 1 });
 
 clientSchema.set('toJSON', {
-  transform: (_doc, ret: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transform: (_doc: unknown, ret: any) => {
     ret.id = String(ret._id);
     delete ret._id;
     delete ret.__v;

@@ -75,7 +75,6 @@ const userSchema = new Schema<IUser>(
   }
 );
 
-
 userSchema.pre('save', async function (next) {
   if (this.isModified('passwordHash')) {
     this.passwordHash = await bcrypt.hash(this.passwordHash, env.BCRYPT_ROUNDS);
@@ -95,7 +94,8 @@ userSchema.methods.comparePin = async function (candidate: string): Promise<bool
 };
 
 userSchema.set('toJSON', {
-  transform: (_doc, ret: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transform: (_doc: unknown, ret: any) => {
     ret.id = String(ret._id);
     delete ret._id;
     delete ret.__v;

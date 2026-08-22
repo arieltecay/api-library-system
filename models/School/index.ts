@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, Types } from 'mongoose';
 
 export interface ISchool extends Document {
   name: string;
@@ -17,31 +17,26 @@ const schoolSchema = new Schema<ISchool>(
       type: String,
       required: true,
       trim: true,
-      maxlength: 100,
+      maxlength: 150,
     },
     code: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
-      uppercase: true,
       maxlength: 20,
     },
     address: {
       type: String,
       trim: true,
-      maxlength: 200,
     },
     phone: {
       type: String,
       trim: true,
-      maxlength: 30,
     },
     email: {
       type: String,
-      lowercase: true,
       trim: true,
-      maxlength: 150,
+      lowercase: true,
     },
     active: {
       type: Boolean,
@@ -58,7 +53,8 @@ schoolSchema.index({ code: 1 });
 schoolSchema.index({ active: 1 });
 
 schoolSchema.set('toJSON', {
-  transform: (_doc, ret: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transform: (_doc: unknown, ret: any) => {
     ret.id = String(ret._id);
     delete ret._id;
     delete ret.__v;
