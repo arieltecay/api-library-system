@@ -3,6 +3,7 @@ import type { ProductLean } from '../../models/Product/index.js';
 import { ProductType, ProductUnit } from '../../models/Product/index.js';
 import { NotFoundError, ConflictError, ValidationError } from '../../utils/errors.js';
 import { withId, withIds } from '../../utils/lean.js';
+import { Types } from 'mongoose';
 
 export function deriveCode(type: ProductType, id: string): string {
   const prefix = type === 'service' ? 'SRV' : 'PRD';
@@ -47,6 +48,7 @@ export async function listProducts(params: {
     filter.$or = [
       { name: { $regex: params.search, $options: 'i' } },
       { description: { $regex: params.search, $options: 'i' } },
+      { code: { $regex: params.search, $options: 'i' } },
     ];
   }
   if (params.type) filter.type = params.type;
@@ -92,14 +94,26 @@ export async function createProduct(schoolId: string, data: {
   stock: number;
   minStock?: number;
   unit?: ProductUnit;
+  code?: string;
 }): Promise<ProductLean> {
   const existing = await ProductModel.findOne({ name: data.name, school: schoolId }).lean();
   if (existing) {
     throw new ConflictError('Ya existe un producto con ese nombre en esta escuela');
   }
 
+  let finalCode = data.code?.toUpperCase().trim();
+  if (finalCode) {
+    const codeExists = await ProductModel.findOne({ code: finalCode, school: schoolId }).lean();
+    if (codeExists) {
+      throw new ConflictError('El código ya existe en esta escuela');
+    }
+  } else {
+    finalCode = deriveCode(data.type, new Types.ObjectId().toString());
+  }
+
   const product = await ProductModel.create({
     ...data,
+    code: finalCode,
     school: schoolId,
     stock: data.type === 'service' ? 0 : data.stock,
   });
@@ -117,11 +131,25 @@ export async function updateProduct(schoolId: string, id: string, data: Partial<
   minStock?: number;
   unit?: ProductUnit;
   active: boolean;
+  code?: string;
 }>): Promise<ProductLean> {
   if (data.name) {
     const existing = await ProductModel.findOne({ name: data.name, school: schoolId, _id: { $ne: id } }).lean();
     if (existing) {
       throw new ConflictError('Ya existe un producto con ese nombre en esta escuela');
+    }
+  }
+
+  if (data.code !== undefined) {
+    const finalCode = data.code.toUpperCase().trim();
+    if (finalCode) {
+      const codeExists = await ProductModel.findOne({ code: finalCode, school: schoolId, _id: { $ne: id } }).lean();
+      if (codeExists) {
+        throw new ConflictError('El código ya existe en esta escuela');
+      }
+      data.code = finalCode;
+    } else {
+      data.code = undefined;
     }
   }
 

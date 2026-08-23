@@ -10,6 +10,7 @@ export const createProductSchema = z.object({
     stock: z.number().int().min(0).default(0),
     minStock: z.number().int().min(0).optional(),
     unit: z.enum(['unit', 'sheet', 'binding']).optional(),
+    code: z.string().max(50).optional(),
   }),
 });
 
@@ -27,6 +28,7 @@ export const updateProductSchema = z.object({
     minStock: z.number().int().min(0).optional(),
     unit: z.enum(['unit', 'sheet', 'binding']).optional(),
     active: z.boolean().optional(),
+    code: z.string().max(50).optional(),
   }),
 });
 
