@@ -6,11 +6,15 @@ import { NotFoundError, ConflictError, ValidationError } from '../../utils/error
 import { withId, withIds } from '../../utils/lean.js';
 import { cogs, grossProfit, grossMarginPercent } from '../../utils/profit.js';
 import type {
-  CashShiftListResult,
   CloseCashShiftResult,
   DailySummary,
-  ListCashShiftsParams,
+  CashShiftDetail,
 } from './types.js';
+import {
+  calculateSalesTotals,
+  buildMovementAggregated,
+  resolveExpectedAmount,
+} from './cashShiftDetail.js';
 
 export async function openCashShift(schoolId: string, sellerId: string, openingAmount: number): Promise<CashShiftLean> {
   const existing = await CashShiftModel.findOne({ seller: sellerId, school: schoolId, status: 'open' }).lean();
@@ -137,6 +141,76 @@ export async function closeCashShift(
   };
 }
 
+export async function getCashShiftDetail(schoolId: string, cashShiftId: string): Promise<CashShiftDetail> {
+  const cashShift = await CashShiftModel.findOne({ _id: cashShiftId, school: schoolId }).populate({ path: 'seller', select: 'name' }).lean();
+  if (!cashShift) {
+    throw new NotFoundError('Turno no encontrado');
+  }
+
+  const [allSales, movements] = await Promise.all([
+    SaleModel.find({ cashShift: cashShift._id, voided: false }).lean(),
+    CashMovementModel.find({ cashShift: cashShift._id, school: schoolId }).lean(),
+  ]);
+
+  // Ventas
+  const salesTotals = calculateSalesTotals(allSales as Array<{ type: string; paymentMethod: 'cash' | 'transfer' | 'credit'; total: number }>);
+
+  // Movimientos
+  const movementAggregated = buildMovementAggregated(movements.map(m => ({
+    type: m.type,
+    category: m.category,
+    amount: m.amount,
+  })));
+
+  // shiftNumber: contar turnos anteriores por escuela
+  const allShifts = await CashShiftModel.find({ school: schoolId }).sort({ openedAt: 1 }).select('_id').lean();
+  const shiftIndex = allShifts.findIndex(s => String(s._id) === cashShiftId);
+  const shiftNumber = shiftIndex >= 0 ? shiftIndex + 1 : 0;
+
+  // expectedAmount y difference
+  const { expectedAmount, difference } = resolveExpectedAmount(
+    cashShift.status,
+    cashShift.openingAmount,
+    salesTotals.cashTotal,
+    movementAggregated.cashOutTotal,
+    movementAggregated.cashInTotal,
+    cashShift.expectedAmount,
+    cashShift.difference
+  );
+
+  // Rentabilidad
+  const profitability = summarizeProfitability(allSales);
+
+  return {
+    shift: {
+      id: String(cashShift._id),
+      shiftNumber,
+      sellerName: ((cashShift.seller as { name?: string | undefined })?.name ?? 'Desconocido'),
+      status: cashShift.status,
+      openedAt: cashShift.openedAt.toISOString(),
+      closedAt: cashShift.closedAt?.toISOString(),
+      openingAmount: cashShift.openingAmount,
+      closingAmount: cashShift.closingAmount,
+      expectedAmount,
+      difference,
+      note: cashShift.note,
+    },
+    sales: salesTotals,
+    movements: {
+      items: movements.map(m => ({
+        id: String(m._id),
+        type: m.type,
+        category: m.category,
+        amount: m.amount,
+        description: m.description,
+        createdAt: m.createdAt.toISOString(),
+      })),
+      aggregated: movementAggregated,
+    },
+    profitability,
+  };
+}
+
 export async function getCashShiftById(schoolId: string, id: string): Promise<CashShiftLean> {
   const cashShift = await CashShiftModel.findOne({ _id: id, school: schoolId }).lean();
   if (!cashShift) {
@@ -193,7 +267,7 @@ export async function listCashShifts(params: {
   return {
     items: (withIds(items) as CashShiftLean[]).map(s => ({
       ...s,
-      sellerName: (s as any).seller?.name ?? 'Desconocido',
+      sellerName: ((s as { seller: { name?: string | undefined } }).seller?.name ?? 'Desconocido'),
       shiftNumber: shiftNumberMap.get(s.id) ?? 0,
     })),
     total,
@@ -310,7 +384,7 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
     .filter(s => s.paymentMethod === 'transfer')
     .reduce((s, sale) => s + sale.total, 0);
   const returnsTotal = sales
-    .filter(s => (s as any).type === 'return')
+    .filter(s => s.type === 'return')
     .reduce((s, sale) => s + sale.total, 0);
   const creditPaymentsTotal = creditMovements.reduce((s, m) => s + m.amount, 0);
 
@@ -334,7 +408,7 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
   const shiftsWithDifference = closedShifts.filter(sh => sh.difference !== 0 && sh.difference != null).length;
   const pendingShifts = shifts
     .filter(s => s.status === 'open')
-    .map(s => ({ sellerName: (s as any).seller?.name ?? 'Desconocido', id: String(s._id) }));
+    .map(s => ({ sellerName: ((s as { seller: { name?: string | undefined } }).seller?.name ?? 'Desconocido'), id: String(s._id) }));
 
   return {
     date: start.toISOString().split('T')[0] as string,

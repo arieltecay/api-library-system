@@ -9,6 +9,7 @@ import {
   createCashMovementSchema,
   getCashMovementsByShiftSchema,
   getCashMovementsAggregatedSchema,
+  getCashShiftDetailSchema,
 } from '../../Controllers/CashShifts/types.js';
 import { authMiddleware } from '../../middleware/auth.js';
 
@@ -20,6 +21,7 @@ router.post('/open', validate(openCashShiftSchema), cashShiftsController.openCas
 router.get('/active', cashShiftsController.getActiveCashShift);
 router.get('/summary/daily', cashShiftsController.getDailySummary);
 router.post('/:id/close', validate(closeCashShiftSchema), cashShiftsController.closeCashShift);
+router.get('/:id/detail', validate(getCashShiftDetailSchema), cashShiftsController.getCashShiftDetail);
 router.get('/:id', validate(z.object({ params: z.object({ id: z.string().regex(/^[0-9a-fA-F]{24}$/) }) })), cashShiftsController.getCashShift);
 router.get('/', validate(listCashShiftsSchema), cashShiftsController.listCashShifts);
 

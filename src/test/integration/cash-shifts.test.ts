@@ -384,4 +384,42 @@ describe('CashShifts Integration Tests', () => {
       expect(res.body).toHaveProperty('error', 'VALIDATION_ERROR');
     });
   });
+
+  describe('GET /cash-shifts/:id/detail', () => {
+    it('should return 401 for missing token', async () => {
+      const res = await testApp
+        .get(`/cash-shifts/${testUtils.createCashShiftId()}/detail`)
+        .expect(401);
+
+      expect(res.body).toHaveProperty('error', 'AUTHENTICATION_ERROR');
+    });
+
+    it('should return 400 for invalid ID format', async () => {
+      const res = await testApp
+        .get('/cash-shifts/not-a-valid-id/detail')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(400);
+
+      expect(res.body).toHaveProperty('error', 'VALIDATION_ERROR');
+    });
+
+    it('should return 200 with full detail structure', async () => {
+      const res = await testApp
+        .get(`/cash-shifts/${testUtils.createCashShiftId()}/detail`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty('shift');
+      expect(res.body.shift).toHaveProperty('id');
+      expect(res.body.shift).toHaveProperty('shiftNumber');
+      expect(res.body.shift).toHaveProperty('sellerName');
+      expect(res.body.shift).toHaveProperty('status');
+      expect(res.body).toHaveProperty('sales');
+      expect(res.body).toHaveProperty('movements');
+      expect(res.body.movements).toHaveProperty('items');
+      expect(res.body.movements).toHaveProperty('aggregated');
+      expect(res.body.movements.aggregated).toHaveProperty('byCategory');
+      expect(res.body).toHaveProperty('profitability');
+    });
+  });
 });

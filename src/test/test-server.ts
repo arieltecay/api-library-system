@@ -811,6 +811,54 @@ app.get('/cash-shifts/daily-summary', (req, res) => {
   });
 });
 
+app.get('/cash-shifts/:id/detail', validateId, (req, res) => {
+  res.json({
+    shift: {
+      id: req.params.id,
+      shiftNumber: 1,
+      sellerName: 'Vendedor Test',
+      status: 'closed',
+      openedAt: new Date().toISOString(),
+      closedAt: new Date().toISOString(),
+      openingAmount: 10000,
+      closingAmount: 15000,
+      expectedAmount: 15000,
+      difference: 0,
+      note: undefined,
+    },
+    sales: {
+      cashTotal: 5000,
+      transferTotal: 3000,
+      creditTotal: 0,
+      salesCount: 2,
+      returnsTotal: 0,
+    },
+    movements: {
+      items: [],
+      aggregated: {
+        cashInTotal: 0,
+        cashOutTotal: 0,
+        netMovements: 0,
+        movementsCount: 0,
+        byCategory: {
+          lunch: { in: 0, out: 0, count: 0 },
+          supplies: { in: 0, out: 0, count: 0 },
+          personal_withdrawal: { in: 0, out: 0, count: 0 },
+          change: { in: 0, out: 0, count: 0 },
+          expense: { in: 0, out: 0, count: 0 },
+          other: { in: 0, out: 0, count: 0 },
+        },
+      },
+    },
+    profitability: {
+      revenue: 5000,
+      cogs: 1000,
+      grossProfit: 4000,
+      grossMarginPercent: 80,
+    },
+  });
+});
+
 app.get('/cash-shifts/:id', validateId, (req, res) => {
   res.status(404).json({ error: 'NOT_FOUND', message: 'Turno no encontrado' });
 });

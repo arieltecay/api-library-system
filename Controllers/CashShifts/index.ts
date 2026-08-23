@@ -56,6 +56,12 @@ export async function getDailySummary(req: Request, res: Response): Promise<void
 }
 
 // Cash Movement endpoints
+export async function getCashShiftDetail(req: Request, res: Response): Promise<void> {
+  const id = req.params.id as string;
+  const detail = await cashShiftsService.getCashShiftDetail(req.schoolId!, id);
+  res.json(detail);
+}
+
 export const createCashMovement = cashMovementsController.createCashMovement;
 export const getCashMovementsByShift = cashMovementsController.getCashMovementsByShift;
 export const getCashMovementsAggregated = cashMovementsController.getCashMovementsAggregated;

@@ -48,6 +48,12 @@ export const getCashMovementsByShiftSchema = z.object({
   }),
 });
 
+export const getCashShiftDetailSchema = z.object({
+  params: z.object({
+    id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido'),
+  }),
+});
+
 export const getCashMovementsAggregatedSchema = z.object({
   params: z.object({
     cashShiftId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID de turno inválido'),
@@ -60,3 +66,4 @@ export type ListCashShiftsInput = z.infer<typeof listCashShiftsSchema>['query'];
 export type CreateCashMovementInput = z.infer<typeof createCashMovementSchema>;
 export type GetCashMovementsByShiftInput = z.infer<typeof getCashMovementsByShiftSchema>;
 export type GetCashMovementsAggregatedInput = z.infer<typeof getCashMovementsAggregatedSchema>;
+export type GetCashShiftDetailInput = z.infer<typeof getCashShiftDetailSchema>;
