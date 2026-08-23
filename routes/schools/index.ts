@@ -47,6 +47,10 @@ const listSchoolsSchema = z.object({
   }),
 });
 
+// Endpoint público para login - lista escuelas activas sin autenticación
+router.get('/public', schoolsController.listPublicSchools);
+
+// Rutas protegidas
 router.use(authMiddleware);
 
 router.get('/', validate(listSchoolsSchema), schoolsController.listSchools);

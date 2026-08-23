@@ -14,6 +14,11 @@ export async function listSchools(req: Request, res: Response): Promise<void> {
   res.json(result);
 }
 
+export async function listPublicSchools(req: Request, res: Response): Promise<void> {
+  const result = await schoolsService.listPublicSchools();
+  res.json(result);
+}
+
 export async function getSchool(req: Request, res: Response): Promise<void> {
   const id = req.params.id as string;
   const school = await schoolsService.getSchoolById(id);

@@ -49,6 +49,11 @@ export async function listSchools(params: {
   };
 }
 
+export async function listPublicSchools(): Promise<{ items: SchoolLean[] }> {
+  const items = await SchoolModel.find({ active: true }).sort({ name: 1 }).lean();
+  return { items: withIds(items) as SchoolLean[] };
+}
+
 export async function getSchoolById(id: string): Promise<SchoolLean> {
   const school = await SchoolModel.findById(id).lean();
   if (!school) {
