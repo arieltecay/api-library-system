@@ -885,6 +885,136 @@ app.get('/cash-shifts/:id/movements', validateId, (req, res) => {
   });
 });
 
+// Admins routes (require superadmin)
+app.use('/admins', authMiddleware);
+app.get('/admins', (req, res) => {
+  if (req.user?.role !== 'superadmin') {
+    return res.status(403).json({ error: 'AUTHORIZATION_ERROR', message: 'Rol insuficiente para esta acción' });
+  }
+  res.json({
+    items: [],
+    total: 0,
+    page: Number(req.query.page) || 1,
+    limit: Number(req.query.limit) || 20,
+    totalPages: 0,
+  });
+});
+app.post('/admins', (req, res) => {
+  if (req.user?.role !== 'superadmin') {
+    return res.status(403).json({ error: 'AUTHORIZATION_ERROR', message: 'Rol insuficiente para esta acción' });
+  }
+  const { name, email, password, pin, role, schoolCode } = req.body;
+  if (!name || !email || !password || !role || !schoolCode) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Datos de entrada inválidos' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Email inválido' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'La contraseña debe tener al menos 6 caracteres' });
+  }
+  if (pin && pin.length < 4) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'El PIN debe tener al menos 4 dígitos' });
+  }
+  if (!['admin', 'seller'].includes(role)) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Rol inválido (admin/seller)' });
+  }
+  if (!/^[A-Z]{2}\d{3}$/.test(schoolCode)) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Código de escuela inválido (formato: XX000)' });
+  }
+  res.status(201).json({
+    id: 'new-admin-id',
+    name,
+    email,
+    role,
+    schoolCode,
+    active: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+});
+app.put('/admins/:id', (req, res) => {
+  if (req.user?.role !== 'superadmin') {
+    return res.status(403).json({ error: 'AUTHORIZATION_ERROR', message: 'Rol insuficiente para esta acción' });
+  }
+  if (!/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'ID inválido' });
+  }
+  res.json({
+    id: req.params.id,
+    ...req.body,
+    updatedAt: new Date().toISOString(),
+  });
+});
+app.delete('/admins/:id', (req, res) => {
+  if (req.user?.role !== 'superadmin') {
+    return res.status(403).json({ error: 'AUTHORIZATION_ERROR', message: 'Rol insuficiente para esta acción' });
+  }
+  if (!/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'ID inválido' });
+  }
+  // Simulate non-existent admin in mock (no database)
+  res.status(404).json({ error: 'NOT_FOUND', message: 'Admin no encontrado' });
+});
+
+// POS routes (require admin)
+app.use('/pos', authMiddleware);
+app.get('/pos', (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'AUTHORIZATION_ERROR', message: 'Rol insuficiente para esta acción' });
+  }
+  res.json({
+    items: [],
+    total: 0,
+    page: Number(req.query.page) || 1,
+    limit: Number(req.query.limit) || 20,
+    totalPages: 0,
+  });
+});
+app.post('/pos', (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'AUTHORIZATION_ERROR', message: 'Rol insuficiente para esta acción' });
+  }
+  const { name, code } = req.body;
+  if (!name || !code) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Datos de entrada inválidos' });
+  }
+  if (!/^[A-Z]{2}\d{3}$/.test(code)) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Código inválido (formato: XX000)' });
+  }
+  res.status(201).json({
+    id: 'new-pos-id',
+    name,
+    code,
+    school: req.schoolId,
+    active: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+});
+app.put('/pos/:id', (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'AUTHORIZATION_ERROR', message: 'Rol insuficiente para esta acción' });
+  }
+  if (!/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'ID inválido' });
+  }
+  res.json({
+    id: req.params.id,
+    ...req.body,
+    updatedAt: new Date().toISOString(),
+  });
+});
+app.delete('/pos/:id', (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'AUTHORIZATION_ERROR', message: 'Rol insuficiente para esta acción' });
+  }
+  if (!/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'ID inválido' });
+  }
+  res.status(204).send();
+});
+
 // Auth routes
 app.use('/auth', (req, res) => {
   if (req.method === 'POST' && req.path === '/login') {
