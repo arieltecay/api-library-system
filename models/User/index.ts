@@ -2,7 +2,7 @@ import mongoose, { Document, Schema, Types } from 'mongoose';
 import bcrypt from 'bcrypt';
 import { env } from '../../config/env.js';
 
-export type UserRole = 'admin' | 'seller';
+export type UserRole = 'superadmin' | 'admin' | 'seller';
 
 export interface IUser extends Document {
   name: string;
@@ -12,7 +12,7 @@ export interface IUser extends Document {
   role: UserRole;
   active: boolean;
   lastLoginAt?: Date;
-  school: Types.ObjectId;
+  school?: Types.ObjectId;
   pos?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -48,7 +48,7 @@ const userSchema = new Schema<IUser>(
     },
     role: {
       type: String,
-      enum: ['admin', 'seller'],
+      enum: ['superadmin', 'admin', 'seller'],
       required: true,
       default: 'seller',
     },
@@ -62,7 +62,8 @@ const userSchema = new Schema<IUser>(
     school: {
       type: Schema.Types.ObjectId,
       ref: 'School',
-      required: true,
+      required: false,
+      default: null,
     },
     pos: {
       type: Schema.Types.ObjectId,

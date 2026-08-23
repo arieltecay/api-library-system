@@ -108,7 +108,7 @@ export async function createUser(schoolId: string, data: {
   email: string;
   password: string;
   pin: string;
-  role: 'admin' | 'seller';
+  role: 'seller';
   pos?: string;
 }): Promise<{ user: UserLean }> {
   const existingEmail = await UserModel.findOne({ email: data.email, school: schoolId });
@@ -176,8 +176,11 @@ export async function deleteUser(schoolId: string, id: string): Promise<{ delete
     throw new NotFoundError('Usuario no encontrado');
   }
 
-  if (user.email === 'admin@library.com') {
-    throw new ValidationError('No se puede eliminar el usuario administrador principal');
+  if (user.role === 'superadmin') {
+    throw new ValidationError('No se puede eliminar el superadministrador');
+  }
+  if (user.role === 'admin') {
+    throw new ValidationError('Para desactivar un admin, usa el endpoint de admins');
   }
 
   user.active = false;

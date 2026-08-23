@@ -12,6 +12,7 @@
     "seed": "tsx scripts/seed.ts",
     "seed:dev": "NODE_ENV=development tsx scripts/seed.ts",
     "seed:prod": "NODE_ENV=production tsx scripts/seed.ts",
+    "create-superadmin": "tsx scripts/create-superadmin.ts",
     "lint": "eslint . --ext .ts",
     "test": "vitest",
     "test:run": "vitest run",

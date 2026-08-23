@@ -17,6 +17,8 @@ import creditsRoutes from './routes/credits/index.js';
 import dashboardRoutes from './routes/dashboard/index.js';
 import settingsRoutes from './routes/settings/index.js';
 import schoolsRoutes from './routes/schools/index.js';
+import adminsRoutes from './routes/admins/index.js';
+import posRoutes from './routes/pos/index.js';
 
 const app = express();
 
@@ -53,6 +55,8 @@ app.use('/credits', creditsRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/settings', settingsRoutes);
 app.use('/schools', schoolsRoutes);
+app.use('/admins', adminsRoutes);
+app.use('/pos', posRoutes);
 
 // Handle 404s
 app.use(notFoundHandler);

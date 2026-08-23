@@ -1,4 +1,5 @@
 import { CashMovementModel } from '../../models/CashMovement/index.js';
+import { UserRole } from '../../models/User/index.js';
 import type { CashMovementLean, CashMovementType, CashMovementCategory } from '../../models/CashMovement/index.js';
 import { CashShiftModel } from '../../models/CashShift/index.js';
 import { NotFoundError, ConflictError, ValidationError } from '../../utils/errors.js';
@@ -161,7 +162,7 @@ export async function deleteCashMovement(
   schoolId: string,
   movementId: string,
   requesterId: string,
-  requesterRole: 'admin' | 'seller'
+  requesterRole: UserRole
 ): Promise<void> {
   const movement = await CashMovementModel.findOne({ _id: movementId, school: schoolId });
   if (!movement) {

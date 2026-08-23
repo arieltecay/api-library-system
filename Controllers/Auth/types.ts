@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const loginPinSchema = z.object({
   body: z.object({
     pin: z.string().length(4, 'El PIN debe tener 4 dígitos').regex(/^\d{4}$/, 'El PIN debe ser numérico'),
+    schoolId: z.string().min(1, 'schoolId requerido'),
   }),
 });
 

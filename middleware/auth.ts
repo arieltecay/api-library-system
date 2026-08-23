@@ -7,7 +7,7 @@ import { UserRole } from '../models/User/index.js';
 export interface AuthPayload {
   sub: string;
   role: UserRole;
-  schoolId: string;
+  schoolId?: string;
   posId?: string;
   iat: number;
   exp: number;
@@ -38,7 +38,7 @@ export function authMiddleware(
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
     req.user = payload;
-    req.schoolId = payload.schoolId;
+    req.schoolId = payload.schoolId ?? undefined;
     req.posId = payload.posId;
     next();
   } catch {
@@ -60,3 +60,4 @@ export function requireRole(...allowedRoles: UserRole[]) {
 
 export const requireAdmin = requireRole('admin');
 export const requireSellerOrAdmin = requireRole('seller', 'admin');
+export const requireSuperAdmin = requireRole('superadmin');

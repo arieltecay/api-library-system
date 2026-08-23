@@ -2,8 +2,8 @@ import { Request, Response } from 'express';
 import * as authService from '../../Services/Auth/index.js';
 
 export async function loginPin(req: Request, res: Response): Promise<void> {
-  const { pin } = req.body;
-  const result = await authService.loginWithPin(pin);
+  const { pin, schoolId } = req.body;
+  const result = await authService.loginWithPin(pin, schoolId);
   res.json(result);
 }
 
