@@ -508,7 +508,7 @@ export async function listSales(params: {
 
 export async function getSaleById(schoolId: string, id: string): Promise<SaleLean> {
   const sale = await SaleModel.findOne({ _id: id, school: schoolId })
-    .populate('client', 'fullName balance')
+    .populate('client', 'fullName balance dni')
     .populate('seller', 'name role')
     .lean();
   if (!sale) {
