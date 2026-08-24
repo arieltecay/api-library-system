@@ -19,6 +19,12 @@ export async function listPublicSchools(req: Request, res: Response): Promise<vo
   res.json(result);
 }
 
+export async function getPublicSchoolBySlug(req: Request, res: Response): Promise<void> {
+  const slug = req.params.slug as string;
+  const school = await schoolsService.getPublicSchoolBySlug(slug);
+  res.json(school);
+}
+
 export async function getSchool(req: Request, res: Response): Promise<void> {
   const id = req.params.id as string;
   const school = await schoolsService.getSchoolById(id);

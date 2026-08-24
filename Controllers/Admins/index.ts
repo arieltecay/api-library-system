@@ -31,3 +31,10 @@ export async function deleteAdmin(req: Request, res: Response): Promise<void> {
   const result = await adminsService.deleteAdmin(id);
   res.json(result);
 }
+
+export async function updateSuperAdmin(req: Request, res: Response): Promise<void> {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const body = req.body as { password?: string; pin?: string };
+  const result = await adminsService.updateSuperAdmin(id, body);
+  res.json(result);
+}

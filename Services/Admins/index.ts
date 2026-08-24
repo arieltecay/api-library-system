@@ -152,3 +152,18 @@ export async function deleteAdmin(id: string): Promise<{ deleted: boolean }> {
   await user.save();
   return { deleted: true };
 }
+
+/** Actualiza credenciales del superadmin (password, pin). */
+export async function updateSuperAdmin(
+  id: string,
+  data: { password?: string; pin?: string }
+): Promise<{ user: UserLean }> {
+  const user = await UserModel.findOne({ _id: id, role: 'superadmin' });
+  if (!user) {
+    throw new NotFoundError('Superadmin no encontrado');
+  }
+  if (data.password) user.passwordHash = data.password;
+  if (data.pin) user.pinHash = data.pin;
+  await user.save();
+  return { user: user.toJSON() as UserLean };
+}

@@ -324,6 +324,89 @@ app.patch('/products/:id/stock', authMiddleware, requireAdminOrSeller, validateI
   });
 });
 
+// Schools routes
+app.get('/schools/public', (req, res) => {
+  res.json({
+    items: [
+      { id: 'school-1', name: 'Escuela Principal', code: 'EP1', slug: 'libreria', active: true },
+      { id: 'school-2', name: 'Escuela Secundaria', code: 'ES2', slug: 'libreria-2', active: true },
+    ],
+  });
+});
+
+app.get('/schools/public/:slug', (req, res) => {
+  const slug = req.params.slug;
+  
+  // Validate slug format (same as slugParamSchema: /^[a-z0-9-]+$/)
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Slug inválido' });
+  }
+  
+  const schools: Record<string, { id: string; name: string; slug: string }> = {
+    'libreria': { id: 'school-1', name: 'Escuela Principal', slug: 'libreria' },
+    'libreria-2': { id: 'school-2', name: 'Escuela Secundaria', slug: 'libreria-2' },
+  };
+  
+  const school = schools[slug];
+  if (school) {
+    res.json(school);
+  } else {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'Negocio no encontrado' });
+  }
+});
+
+// Protected schools routes
+app.use('/schools', authMiddleware);
+
+app.get('/schools', (req, res) => {
+  res.json({
+    items: [],
+    total: 0,
+    page: Number(req.query.page) || 1,
+    limit: Number(req.query.limit) || 20,
+    totalPages: 0,
+  });
+});
+
+app.get('/schools/:id', validateId, (req, res) => {
+  res.status(404).json({ error: 'NOT_FOUND', message: 'Escuela no encontrada' });
+});
+
+app.post('/schools', requireAdmin, (req, res) => {
+  const { name, code, slug } = req.body;
+  if (!name || !code) {
+    return res.status(400).json({ error: 'VALIDATION_ERROR', message: 'Nombre y código requeridos' });
+  }
+  if (slug === 'libreria' || slug === 'libreria-2') {
+    return res.status(409).json({ error: 'CONFLICT_ERROR', message: 'Ya existe una escuela con ese slug' });
+  }
+  res.status(201).json({ 
+    id: 'new-school-id',
+    name,
+    code: code.toUpperCase(),
+    slug: slug || name.toLowerCase().replace(/\s+/g, '-'),
+    active: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+});
+
+app.patch('/schools/:id', requireAdmin, validateId, (req, res) => {
+  const { slug } = req.body;
+  if (slug === 'libreria' || slug === 'libreria-2') {
+    return res.status(409).json({ error: 'CONFLICT_ERROR', message: 'Ya existe una escuela con ese slug' });
+  }
+  res.json({ 
+    id: req.params.id,
+    ...req.body,
+    updatedAt: new Date().toISOString(),
+  });
+});
+
+app.delete('/schools/:id', requireAdmin, validateId, (req, res) => {
+  res.status(204).send();
+});
+
 // Sales routes
 app.use('/sales', authMiddleware);
 

@@ -2,6 +2,7 @@ import { SchoolModel } from '../../models/School/index.js';
 import type { SchoolLean } from '../../models/School/index.js';
 import { NotFoundError, ConflictError } from '../../utils/errors.js';
 import { withId, withIds } from '../../utils/lean.js';
+import { slugify } from '../../utils/slug.js';
 
 export interface SchoolListResult {
   items: SchoolLean[];
@@ -25,6 +26,7 @@ export async function listSchools(params: {
     filter.$or = [
       { name: { $regex: params.search, $options: 'i' } },
       { code: { $regex: params.search, $options: 'i' } },
+      { slug: { $regex: params.search, $options: 'i' } },
     ];
   }
   if (params.active !== undefined) filter.active = params.active;
@@ -62,9 +64,19 @@ export async function getSchoolById(id: string): Promise<SchoolLean> {
   return withId(school) as SchoolLean;
 }
 
+export async function getPublicSchoolBySlug(slug: string): Promise<{ id: string; name: string; slug: string }> {
+  const school = await SchoolModel.findOne({ slug, active: true }).lean();
+  if (!school) {
+    throw new NotFoundError('Negocio no encontrado');
+  }
+  const schoolWithId = withId(school) as SchoolLean;
+  return { id: schoolWithId.id, name: schoolWithId.name, slug: schoolWithId.slug };
+}
+
 export async function createSchool(data: {
   name: string;
   code: string;
+  slug?: string;
   address?: string;
   phone?: string;
   email?: string;
@@ -74,9 +86,22 @@ export async function createSchool(data: {
     throw new ConflictError('Ya existe una escuela con ese código');
   }
 
+  let slug = data.slug?.trim().toLowerCase();
+  if (!slug) {
+    slug = slugify(data.name);
+  } else {
+    slug = slugify(slug);
+  }
+
+  const existingSlug = await SchoolModel.findOne({ slug }).lean();
+  if (existingSlug) {
+    throw new ConflictError('Ya existe una escuela con ese slug');
+  }
+
   const school = await SchoolModel.create({
     ...data,
     code: data.code.toUpperCase(),
+    slug,
   });
 
   return school.toJSON() as SchoolLean;
@@ -85,6 +110,7 @@ export async function createSchool(data: {
 export async function updateSchool(id: string, data: Partial<{
   name: string;
   code: string;
+  slug: string;
   address?: string;
   phone?: string;
   email?: string;
@@ -96,6 +122,15 @@ export async function updateSchool(id: string, data: Partial<{
       throw new ConflictError('Ya existe una escuela con ese código');
     }
     data.code = data.code.toUpperCase();
+  }
+
+  if (data.slug) {
+    const normalizedSlug = slugify(data.slug);
+    const existing = await SchoolModel.findOne({ slug: normalizedSlug, _id: { $ne: id } }).lean();
+    if (existing) {
+      throw new ConflictError('Ya existe una escuela con ese slug');
+    }
+    data.slug = normalizedSlug;
   }
 
   const school = await SchoolModel.findByIdAndUpdate(id, data, { new: true, runValidators: true }).lean();
