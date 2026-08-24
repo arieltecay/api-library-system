@@ -33,7 +33,6 @@ const schoolSchema = new Schema<ISchool>(
       trim: true,
       lowercase: true,
       maxlength: 150,
-      index: true,
     },
     address: {
       type: String,
@@ -60,7 +59,6 @@ const schoolSchema = new Schema<ISchool>(
 );
 
 schoolSchema.index({ code: 1 });
-schoolSchema.index({ slug: 1 }, { unique: true });
 schoolSchema.index({ active: 1 });
 
 schoolSchema.set('toJSON', {

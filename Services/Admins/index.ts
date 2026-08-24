@@ -5,6 +5,7 @@ import { SettingModel } from '../../models/Setting/index.js';
 import type { UserLean } from '../../models/User/index.js';
 import { NotFoundError, ConflictError } from '../../utils/errors.js';
 import { withId, withIds } from '../../utils/lean.js';
+import { slugify } from '../../utils/slug.js';
 
 export interface AdminListResult {
   items: (UserLean & { schoolName?: string })[];
@@ -81,12 +82,20 @@ export async function createAdmin(data: CreateAdminInput): Promise<{ user: UserL
     throw new ConflictError('Ya existe un negocio con ese código');
   }
 
+  // Generar slug único para la escuela
+  let slug = slugify(data.schoolName);
+  let counter = 1;
+  while (await SchoolModel.findOne({ slug }).session(null)) {
+    counter++;
+    slug = `${slug}-${counter}`;
+  }
+
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
     const [school] = await SchoolModel.create(
-      [{ name: data.schoolName, code: data.schoolCode.toUpperCase(), active: true }],
+      [{ name: data.schoolName, code: data.schoolCode.toUpperCase(), slug, active: true }],
       { session }
     );
 
