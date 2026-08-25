@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SaleModel } from '../../../../models/Sale/index.js';
 import { ProductModel } from '../../../../models/Product/index.js';

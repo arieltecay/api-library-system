@@ -108,7 +108,7 @@ export async function closeCashShift(
   })));
 
   // Expected cash = opening + cash sales - returns cash - cash out + cash in
-  const { expectedAmount, difference } = resolveExpectedAmount(
+  const { expectedAmount } = resolveExpectedAmount(
     cashShift.status,
     cashShift.openingAmount,
     salesTotals.cashTotal,
