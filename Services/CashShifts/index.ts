@@ -93,26 +93,34 @@ export async function closeCashShift(
     voided: false,
   }).lean();
 
-  const sales = allSales.filter(s => s.type === 'sale');
-  const cashSales = sales.filter(s => s.paymentMethod === 'cash');
-  const cashTotal = cashSales.reduce((sum, s) => sum + s.total, 0);
+  // Calculate sales totals using shared function
+  const salesTotals = calculateSalesTotals(allSales as Array<{ type: string; paymentMethod: 'cash' | 'transfer' | 'credit'; total: number }>);
 
   // Calculate profitability
   const profitability = summarizeProfitability(allSales);
 
   // Calculate movements
   const movements = await CashMovementModel.find({ cashShift: cashShift._id, school: schoolId }).lean();
-  const cashInTotal = movements
-    .filter(m => m.type === 'in')
-    .reduce((sum, m) => sum + m.amount, 0);
-  const cashOutTotal = movements
-    .filter(m => m.type === 'out')
-    .reduce((sum, m) => sum + m.amount, 0);
-  const netMovements = cashInTotal - cashOutTotal;
+  const movementAggregated = buildMovementAggregated(movements.map(m => ({
+    type: m.type,
+    category: m.category,
+    amount: m.amount,
+  })));
 
-  // Expected cash = opening + cash sales - cash out + cash in
-  const expectedAmount = cashShift.openingAmount + cashTotal - cashOutTotal + cashInTotal;
-  const difference = closingAmount - expectedAmount;
+  // Expected cash = opening + cash sales - returns cash - cash out + cash in
+  const { expectedAmount, difference } = resolveExpectedAmount(
+    cashShift.status,
+    cashShift.openingAmount,
+    salesTotals.cashTotal,
+    movementAggregated.cashOutTotal,
+    movementAggregated.cashInTotal,
+    salesTotals.returnsCashTotal,
+    cashShift.expectedAmount,
+    cashShift.difference
+  );
+
+  // For open shift being closed, expectedAmount is always a number
+  const expectedAmountValue = expectedAmount ?? (cashShift.openingAmount + salesTotals.cashTotal - salesTotals.returnsCashTotal - movementAggregated.cashOutTotal + movementAggregated.cashInTotal);
 
   // Validate difference
   if (difference !== 0 && !note) {
@@ -120,20 +128,23 @@ export async function closeCashShift(
   }
 
   cashShift.closingAmount = closingAmount;
-  cashShift.expectedAmount = expectedAmount;
+  cashShift.expectedAmount = expectedAmountValue;
   cashShift.difference = difference;
   cashShift.status = 'closed';
   cashShift.closedAt = new Date();
   cashShift.note = note;
   await cashShift.save();
 
+  // difference is always a number when closing (closingAmount - expectedAmount)
+  const differenceValue = difference ?? (closingAmount - expectedAmountValue);
+
   return {
     cashShift: cashShift.toJSON() as CashShiftLean,
-    expectedAmount,
-    difference,
-    cashInTotal,
-    cashOutTotal,
-    netMovements,
+    expectedAmount: expectedAmountValue,
+    difference: differenceValue,
+    cashInTotal: movementAggregated.cashInTotal,
+    cashOutTotal: movementAggregated.cashOutTotal,
+    netMovements: movementAggregated.netMovements,
     revenue: profitability.revenue,
     cogs: profitability.cogs,
     grossProfit: profitability.grossProfit,
@@ -174,6 +185,7 @@ export async function getCashShiftDetail(schoolId: string, cashShiftId: string):
     salesTotals.cashTotal,
     movementAggregated.cashOutTotal,
     movementAggregated.cashInTotal,
+    salesTotals.returnsCashTotal,
     cashShift.expectedAmount,
     cashShift.difference
   );
@@ -310,28 +322,31 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
     CashMovementModel.find({ cashShift: cashShift._id, school: schoolId }).lean(),
   ]);
 
+  // Use shared calculateSalesTotals function
+  const salesTotals = calculateSalesTotals(allSales as Array<{ type: string; paymentMethod: 'cash' | 'transfer' | 'credit'; total: number }>);
+
   const sales = allSales.filter(s => s.type === 'sale');
-  const transferSales = allSales.filter(s => s.paymentMethod === 'transfer');
-  const creditSales = allSales.filter(s => s.paymentMethod === 'credit');
-
-  const cashTotal = sales.reduce((sum, s) => sum + s.total, 0);
-  const transferTotal = transferSales.reduce((sum, s) => sum + s.total, 0);
-  const creditTotal = creditSales.reduce((sum, s) => sum + s.total, 0);
-  const salesCount = sales.length;
   const productsSold = sales.reduce((sum, s) => sum + s.items.reduce((isum, i) => isum + i.quantity, 0), 0);
-  const avgTicket = salesCount > 0 ? sales.reduce((sum, s) => sum + s.total, 0) / salesCount : 0;
+  const avgTicket = salesTotals.salesCount > 0
+    ? sales.reduce((sum, s) => sum + s.total, 0) / salesTotals.salesCount
+    : 0;
 
-  const cashInTotal = movements
-    .filter(m => m.type === 'in')
-    .reduce((sum, m) => sum + m.amount, 0);
-  const cashOutTotal = movements
-    .filter(m => m.type === 'out')
-    .reduce((sum, m) => sum + m.amount, 0);
-  const netMovements = cashInTotal - cashOutTotal;
-  const movementsCount = movements.length;
+  const movementAggregated = buildMovementAggregated(movements.map(m => ({
+    type: m.type,
+    category: m.category,
+    amount: m.amount,
+  })));
 
-  // Expected cash = opening + cash sales - cash out + cash in
-  const expectedCash = cashShift.openingAmount + cashTotal - cashOutTotal + cashInTotal;
+  // Expected cash = opening + cash sales - returns cash - cash out + cash in
+  const { expectedAmount: expectedCashRaw } = resolveExpectedAmount(
+    'open',
+    cashShift.openingAmount,
+    salesTotals.cashTotal,
+    movementAggregated.cashOutTotal,
+    movementAggregated.cashInTotal,
+    salesTotals.returnsCashTotal
+  );
+  const expectedCash = expectedCashRaw ?? (cashShift.openingAmount + salesTotals.cashTotal - salesTotals.returnsCashTotal - movementAggregated.cashOutTotal + movementAggregated.cashInTotal);
 
   // Profitability summary
   const profitability = summarizeProfitability(allSales);
@@ -339,17 +354,17 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
   return {
     cashShift: withId(cashShift) as CashShiftLean,
     aggregated: {
-      cashTotal,
-      transferTotal,
-      creditTotal,
-      salesCount,
+      cashTotal: salesTotals.cashTotal,
+      transferTotal: salesTotals.transferTotal,
+      creditTotal: salesTotals.creditTotal,
+      salesCount: salesTotals.salesCount,
       productsSold,
       avgTicket,
       expectedCash,
-      cashInTotal,
-      cashOutTotal,
-      netMovements,
-      movementsCount,
+      cashInTotal: movementAggregated.cashInTotal,
+      cashOutTotal: movementAggregated.cashOutTotal,
+      netMovements: movementAggregated.netMovements,
+      movementsCount: movementAggregated.movementsCount,
       revenue: profitability.revenue,
       cogs: profitability.cogs,
       grossProfit: profitability.grossProfit,
@@ -377,15 +392,14 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
   ]);
 
   const totalOpening = shifts.reduce((s, sh) => s + sh.openingAmount, 0);
-  const cashSalesTotal = sales
-    .filter(s => s.paymentMethod === 'cash')
-    .reduce((s, sale) => s + sale.total, 0);
-  const transferSalesTotal = sales
-    .filter(s => s.paymentMethod === 'transfer')
-    .reduce((s, sale) => s + sale.total, 0);
-  const returnsTotal = sales
-    .filter(s => s.type === 'return')
-    .reduce((s, sale) => s + sale.total, 0);
+
+  // Use shared calculateSalesTotals for consistency
+  const salesTotals = calculateSalesTotals(sales as Array<{ type: string; paymentMethod: 'cash' | 'transfer' | 'credit'; total: number }>);
+
+  const cashSalesTotal = salesTotals.cashTotal;
+  const transferSalesTotal = salesTotals.transferTotal;
+  const returnsTotal = salesTotals.returnsTotal;
+  const returnsCashTotal = salesTotals.returnsCashTotal;
   const creditPaymentsTotal = creditMovements.reduce((s, m) => s + m.amount, 0);
 
   const cashInTotal = cashMovements
@@ -399,8 +413,8 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
   // Profitability summary
   const profitability = summarizeProfitability(sales);
 
-  // totalExpected = opening + cash sales - returns + credit payments - cash out + cash in
-  const totalExpected = totalOpening + cashSalesTotal - returnsTotal + creditPaymentsTotal - cashOutTotal + cashInTotal;
+  // totalExpected = opening + cash sales - returns cash + credit payments - cash out + cash in
+  const totalExpected = totalOpening + cashSalesTotal - returnsCashTotal + creditPaymentsTotal - cashOutTotal + cashInTotal;
 
   const closedShifts = shifts.filter(s => s.status === 'closed');
   const finalCount = closedShifts.reduce((s, sh) => s + (sh.closingAmount ?? 0), 0);

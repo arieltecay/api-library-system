@@ -5,11 +5,12 @@ import * as salesController from '../../Controllers/Sales/index.js';
 import {
   previewSaleSchema,
   createSaleSchema,
+  createReturnSchema,
   voidSaleSchema,
   returnSaleSchema,
   listSalesSchema,
 } from '../../Controllers/Sales/types.js';
-import { authMiddleware, requireAdmin, requireSellerOrAdmin } from '../../middleware/auth.js';
+import { authMiddleware, requireAdmin } from '../../middleware/auth.js';
 
 const router = Router();
 
@@ -23,6 +24,7 @@ router.use(authMiddleware);
 
 router.post('/preview', validate(previewSaleSchema), salesController.previewSale);
 router.post('/', validate(createSaleSchema), salesController.createSale);
+router.post('/returns', validate(createReturnSchema), salesController.createReturn);
 router.get('/', validate(listSalesSchema), salesController.listSales);
 router.get('/summary', salesController.getSalesSummary);
 router.get('/:id', validate(idParamSchema), salesController.getSale);

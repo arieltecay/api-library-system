@@ -21,6 +21,9 @@ export interface CashShiftDetail {
     creditTotal: number;
     salesCount: number;
     returnsTotal: number;
+    returnsCashTotal: number;
+    returnsTransferTotal: number;
+    returnsCreditTotal: number;
   };
   movements: {
     items: Array<{

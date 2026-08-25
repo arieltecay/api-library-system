@@ -5,6 +5,17 @@ export const saleItemSchema = z.object({
   quantity: z.number().int().min(1, 'La cantidad debe ser al menos 1'),
 });
 
+export const createReturnSchema = z.object({
+  body: z.object({
+    items: z.array(saleItemSchema).min(1, 'Al menos un item requerido'),
+    clientId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID de cliente inválido').optional(),
+    method: z.enum(['cash', 'transfer', 'credit']).default('cash'),
+  }).refine((data) => data.method !== 'credit' || data.clientId, {
+    message: 'Cliente requerido para devolución a crédito',
+    path: ['clientId'],
+  }),
+});
+
 export const previewSaleSchema = z.object({
   body: z.object({
     items: z.array(saleItemSchema).min(1, 'Al menos un item requerido'),
@@ -74,6 +85,7 @@ export const listSalesSchema = z.object({
 export type SaleItemInput = z.infer<typeof saleItemSchema>;
 export type PreviewSaleInput = z.infer<typeof previewSaleSchema>['body'];
 export type CreateSaleInput = z.infer<typeof createSaleSchema>['body'];
+export type CreateReturnInput = z.infer<typeof createReturnSchema>['body'];
 export type VoidSaleInput = z.infer<typeof voidSaleSchema>['body'];
 export type ReturnSaleInput = z.infer<typeof returnSaleSchema>['body'];
 export type ListSalesInput = z.infer<typeof listSalesSchema>['query'];

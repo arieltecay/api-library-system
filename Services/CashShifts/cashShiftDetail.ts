@@ -18,6 +18,9 @@ export interface SalesTotals {
   creditTotal: number;
   salesCount: number;
   returnsTotal: number;
+  returnsCashTotal: number;
+  returnsTransferTotal: number;
+  returnsCreditTotal: number;
 }
 
 export interface MovementAggregated {
@@ -30,10 +33,16 @@ export interface MovementAggregated {
 
 export function calculateSalesTotals(allSales: SaleLike[]): SalesTotals {
   const sales = allSales.filter(s => s.type === 'sale');
+  const returns = allSales.filter(s => s.type === 'return');
+
   const cashTotal = sales.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.total, 0);
   const transferTotal = sales.filter(s => s.paymentMethod === 'transfer').reduce((sum, s) => sum + s.total, 0);
   const creditTotal = sales.filter(s => s.paymentMethod === 'credit').reduce((sum, s) => sum + s.total, 0);
-  const returnsTotal = allSales.filter(s => s.type === 'return').reduce((sum, s) => sum + s.total, 0);
+
+  const returnsCashTotal = returns.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.total, 0);
+  const returnsTransferTotal = returns.filter(s => s.paymentMethod === 'transfer').reduce((sum, s) => sum + s.total, 0);
+  const returnsCreditTotal = returns.filter(s => s.paymentMethod === 'credit').reduce((sum, s) => sum + s.total, 0);
+  const returnsTotal = returnsCashTotal + returnsTransferTotal + returnsCreditTotal;
 
   return {
     cashTotal,
@@ -41,6 +50,9 @@ export function calculateSalesTotals(allSales: SaleLike[]): SalesTotals {
     creditTotal,
     salesCount: sales.length,
     returnsTotal,
+    returnsCashTotal,
+    returnsTransferTotal,
+    returnsCreditTotal,
   };
 }
 
@@ -81,6 +93,7 @@ export function resolveExpectedAmount(
   cashTotal: number,
   cashOutTotal: number,
   cashInTotal: number,
+  returnsCashTotal: number,
   savedExpectedAmount?: number,
   savedDifference?: number
 ): { expectedAmount: number | undefined; difference: number | undefined } {
@@ -92,7 +105,7 @@ export function resolveExpectedAmount(
   }
 
   return {
-    expectedAmount: openingAmount + cashTotal - cashOutTotal + cashInTotal,
+    expectedAmount: openingAmount + cashTotal - returnsCashTotal - cashOutTotal + cashInTotal,
     difference: undefined,
   };
 }

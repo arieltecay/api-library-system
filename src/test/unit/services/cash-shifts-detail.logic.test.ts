@@ -31,6 +31,9 @@ describe('cashShiftDetail logic', () => {
         creditTotal: 0,
         salesCount: 0,
         returnsTotal: 0,
+        returnsCashTotal: 0,
+        returnsTransferTotal: 0,
+        returnsCreditTotal: 0,
       });
     });
   });
@@ -77,6 +80,7 @@ describe('cashShiftDetail logic', () => {
         5000,
         200,
         100,
+        0,
         14900,
         -100
       );
@@ -91,10 +95,25 @@ describe('cashShiftDetail logic', () => {
         10000,
         5000,
         200,
-        100
+        100,
+        0
       );
 
       expect(result.expectedAmount).toBe(14900);
+      expect(result.difference).toBeUndefined();
+    });
+
+    it('should subtract returns cash total from expected amount', () => {
+      const result = resolveExpectedAmount(
+        'open',
+        10000,
+        5000,
+        200,
+        100,
+        500
+      );
+
+      expect(result.expectedAmount).toBe(14400);
       expect(result.difference).toBeUndefined();
     });
   });

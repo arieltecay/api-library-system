@@ -30,6 +30,27 @@ export async function createSale(req: Request, res: Response): Promise<void> {
   res.status(201).json(result);
 }
 
+export async function createReturn(req: Request, res: Response): Promise<void> {
+  if (!req.user) throw new Error('Usuario no autenticado');
+  const { items, clientId, method } = req.body;
+
+  const { CashShiftModel } = await import('../../models/CashShift/index.js');
+  const activeShift = await CashShiftModel.findOne({ seller: req.user.sub, school: req.schoolId, status: 'open' }).lean();
+  if (!activeShift) {
+    throw new Error('No hay turno de caja abierto para este vendedor');
+  }
+
+  const result = await salesService.createReturn({
+    schoolId: req.schoolId!,
+    sellerId: req.user.sub,
+    cashShiftId: activeShift._id.toString(),
+    items,
+    clientId,
+    method,
+  });
+  res.status(201).json(result);
+}
+
 export async function listSales(req: Request, res: Response): Promise<void> {
   const q = req.query;
   const fromDate = q.fromDate ? new Date(q.fromDate as string) : undefined;

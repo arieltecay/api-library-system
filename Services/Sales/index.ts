@@ -9,6 +9,17 @@ import type { CreditMovementLean } from '../../models/CreditMovement/index.js';
 import { NotFoundError, ConflictError, ValidationError } from '../../utils/errors.js';
 import { withId, withIds } from '../../utils/lean.js';
 
+export type ReturnMethod = 'cash' | 'transfer' | 'credit';
+
+export interface CreateReturnParams {
+  schoolId: string;
+  sellerId: string;
+  cashShiftId: string;
+  items: Array<{ product: string; quantity: number }>;
+  clientId?: string;
+  method: ReturnMethod;
+}
+
 export interface SalePreviewResult {
   items: Array<{
     product: string;
@@ -559,4 +570,122 @@ export async function getSalesSummary(schoolId: string): Promise<SalesSummary> {
     returnsAmount,
     averageTicket,
   };
+}
+
+export async function createReturn(params: CreateReturnParams): Promise<SaleResult> {
+  const { schoolId, sellerId, cashShiftId, items, clientId, method } = params;
+
+  const [products, client, cashShift] = await Promise.all([
+    ProductModel.find({ _id: { $in: items.map(i => i.product) }, school: schoolId }).lean(),
+    clientId ? ClientModel.findOne({ _id: clientId, school: schoolId }).lean() : Promise.resolve(null),
+    CashShiftModel.findOne({ _id: cashShiftId, school: schoolId }).lean(),
+  ]);
+
+  if (!cashShift) {
+    throw new ConflictError('Turno de caja no encontrado');
+  }
+  if (cashShift.status !== 'open') {
+    throw new ConflictError('El turno de caja está cerrado');
+  }
+  if (method === 'credit' && !clientId) {
+    throw new ValidationError('Cliente requerido para devolución a crédito');
+  }
+
+  const returnItems = [];
+  let subtotal = 0;
+
+  for (const item of items) {
+    const product = products.find(p => p._id.toString() === item.product);
+    if (!product) {
+      throw new NotFoundError(`Producto no encontrado: ${item.product}`);
+    }
+    // For returns, we don't require product.active
+
+    const unitPrice = product.price;
+    const itemSubtotal = unitPrice * item.quantity;
+    subtotal += itemSubtotal;
+
+    returnItems.push({
+      product: product._id.toString(),
+      name: product.name,
+      type: product.type,
+      quantity: item.quantity,
+      unitPrice,
+      unitCost: product.cost ?? 0,
+      subtotal: itemSubtotal,
+    });
+  }
+
+  const discount = 0; // No discount on returns
+  const total = subtotal;
+
+  const session = await SaleModel.db.startSession();
+  session.startTransaction();
+
+  try {
+    // Restore stock for products
+    for (const item of items) {
+      const product = await ProductModel.findOne({ _id: item.product, school: schoolId }).session(session);
+      if (product && product.type === 'product') {
+        product.stock += item.quantity;
+        await product.save({ session });
+      }
+    }
+
+    // Generate sequential receipt number within the transaction (shared with sales)
+    const lastNumber = await SaleModel.findOne({ school: schoolId }, { number: 1 }).sort({ number: -1 }).session(session);
+    const nextNumber = (lastNumber?.number ?? 0) + 1;
+
+    // Create return sale
+    const sale = await SaleModel.create([{
+      items: returnItems,
+      number: nextNumber,
+      subtotal,
+      discount,
+      total,
+      amountReceived: 0,
+      change: 0,
+      paymentMethod: method,
+      type: 'return',
+      client: clientId ?? undefined,
+      seller: sellerId,
+      cashShift: cashShiftId,
+      school: schoolId,
+      settled: method !== 'credit',
+    }], { session });
+
+    let creditMovement;
+    if (method === 'credit' && clientId) {
+      const clientDoc = await ClientModel.findOne({ _id: clientId, school: schoolId }).session(session);
+      if (!clientDoc) throw new Error('Client not found');
+
+      const newBalance = clientDoc.balance - total;
+      clientDoc.balance = newBalance;
+      await clientDoc.save({ session });
+
+      creditMovement = await CreditMovementModel.create([{
+        client: clientId,
+        sale: sale[0]!._id,
+        school: schoolId,
+        type: 'payment',
+        amount: total,
+        balanceAfter: newBalance,
+        method: 'credit',
+        note: 'Devolución a crédito',
+        admin: sellerId,
+      }], { session });
+    }
+
+    await session.commitTransaction();
+
+    return {
+      sale: sale[0]!.toJSON() as SaleLean,
+      creditMovement: creditMovement?.[0]?.toJSON() as CreditMovementLean,
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    await session.endSession();
+  }
 }
