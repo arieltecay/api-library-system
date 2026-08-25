@@ -122,21 +122,22 @@ export async function closeCashShift(
   // For open shift being closed, expectedAmount is always a number
   const expectedAmountValue = expectedAmount ?? (cashShift.openingAmount + salesTotals.cashTotal - salesTotals.returnsCashTotal - movementAggregated.cashOutTotal + movementAggregated.cashInTotal);
 
-  // Validate difference
-  if (difference !== 0 && !note) {
+  // Validate difference - calculate actual difference when closing
+  const actualDifference = closingAmount - expectedAmountValue;
+  if (actualDifference !== 0 && !note) {
     throw new ValidationError('Se requiere un motivo cuando hay diferencia en el arqueo');
   }
 
   cashShift.closingAmount = closingAmount;
   cashShift.expectedAmount = expectedAmountValue;
-  cashShift.difference = difference;
+  cashShift.difference = actualDifference;
   cashShift.status = 'closed';
   cashShift.closedAt = new Date();
   cashShift.note = note;
   await cashShift.save();
 
   // difference is always a number when closing (closingAmount - expectedAmount)
-  const differenceValue = difference ?? (closingAmount - expectedAmountValue);
+  const differenceValue = actualDifference;
 
   return {
     cashShift: cashShift.toJSON() as CashShiftLean,
