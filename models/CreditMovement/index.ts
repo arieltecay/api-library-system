@@ -17,7 +17,7 @@ export interface ICreditMovement extends Document {
 const creditMovementSchema = new Schema<ICreditMovement>(
   {
     client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
-    sale: { type: Schema.Types.ObjectId, ref: 'Sale', required: true },
+    sale: { type: Schema.Types.ObjectId, ref: 'Sale', required: false },
     school: { type: Schema.Types.ObjectId, ref: 'School', required: true },
     type: { type: String, enum: ['debt', 'payment'], required: true },
     amount: { type: Number, required: true, min: 0 },

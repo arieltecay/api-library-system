@@ -2,6 +2,7 @@ import { CashShiftModel } from '../../models/CashShift/index.js';
 import type { CashShiftLean } from '../../models/CashShift/index.js';
 import { SaleModel } from '../../models/Sale/index.js';
 import { CashMovementModel } from '../../models/CashMovement/index.js';
+import { CreditMovementModel } from '../../models/CreditMovement/index.js';
 import { NotFoundError, ConflictError, ValidationError } from '../../utils/errors.js';
 import { withId, withIds } from '../../utils/lean.js';
 import { cogs, grossProfit, grossMarginPercent } from '../../utils/profit.js';
@@ -386,9 +387,7 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
       .populate({ path: 'seller', select: 'name' })
       .lean(),
     SaleModel.find({ school: schoolId, createdAt: { $gte: start, $lte: end }, voided: false }).lean(),
-    import('../../models/CreditMovement/index.js').then(m =>
-      m.CreditMovementModel.find({ school: schoolId, createdAt: { $gte: start, $lte: end }, type: 'payment' }).lean()
-    ),
+    CreditMovementModel.find({ school: schoolId, createdAt: { $gte: start, $lte: end }, type: 'payment' }).lean(),
     CashMovementModel.find({ school: schoolId, createdAt: { $gte: start, $lte: end } }).lean(),
   ]);
 

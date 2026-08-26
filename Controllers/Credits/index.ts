@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as creditsService from '../../Services/Credits/index.js';
+import { AuthenticationError } from '../../utils/errors.js';
 
 export async function listCredits(req: Request, res: Response): Promise<void> {
   const q = req.query;
@@ -34,9 +35,9 @@ export async function getRecentHistory(req: Request, res: Response): Promise<voi
 }
 
 export async function settleDebt(req: Request, res: Response): Promise<void> {
-  if (!req.user) throw new Error('Usuario no autenticado');
+  if (!req.user) throw new AuthenticationError('Usuario no autenticado');
   const clientId = req.params.clientId as string;
   const { amount, method, note } = req.body;
   const result = await creditsService.settleDebt(req.schoolId!, clientId, req.user.sub, amount, method, note);
-  res.json(result);
+  res.status(200).json({ message: 'Deuda saldada correctamente', data: result });
 }
