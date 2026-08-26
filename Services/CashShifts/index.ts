@@ -301,6 +301,10 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
     productsSold: number;
     avgTicket: number;
     expectedCash: number;
+    returnsTotal: number;
+    returnsCashTotal: number;
+    returnsTransferTotal: number;
+    returnsCreditTotal: number;
     cashInTotal: number;
     cashOutTotal: number;
     netMovements: number;
@@ -363,6 +367,10 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
       productsSold,
       avgTicket,
       expectedCash,
+      returnsTotal: salesTotals.returnsTotal,
+      returnsCashTotal: salesTotals.returnsCashTotal,
+      returnsTransferTotal: salesTotals.returnsTransferTotal,
+      returnsCreditTotal: salesTotals.returnsCreditTotal,
       cashInTotal: movementAggregated.cashInTotal,
       cashOutTotal: movementAggregated.cashOutTotal,
       netMovements: movementAggregated.netMovements,
