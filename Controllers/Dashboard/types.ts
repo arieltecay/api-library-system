@@ -22,9 +22,16 @@ export const shiftsSchema = z.object({
     toDate: z.string().datetime().optional(),
   }),
 });
+export const overviewSchema = z.object({
+  query: z.object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  }),
+});
 
 export type TodayInput = z.infer<typeof todaySchema>;
 export type SalesChartInput = z.infer<typeof salesChartSchema>['query'];
 export type TopProductsInput = z.infer<typeof topProductsSchema>['query'];
 export type DailyClosingInput = z.infer<typeof dailyClosingSchema>['query'];
 export type ShiftsInput = z.infer<typeof shiftsSchema>['query'];
+export type OverviewInput = z.infer<typeof overviewSchema>['query'];

@@ -35,3 +35,10 @@ export async function getShifts(req: Request, res: Response): Promise<void> {
   const result = await dashboardService.getShifts(req.schoolId!, fromDate, toDate);
   res.json(result);
 }
+
+export async function getOverview(req: Request, res: Response): Promise<void> {
+  const from = req.query.from ? new Date(req.query.from as string) : undefined;
+  const to = req.query.to ? new Date(req.query.to as string) : undefined;
+  const result = await dashboardService.getOverview(req.schoolId!, from, to);
+  res.json(result);
+}

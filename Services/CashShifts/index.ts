@@ -97,9 +97,6 @@ export async function closeCashShift(
   // Calculate sales totals using shared function
   const salesTotals = calculateSalesTotals(allSales as Array<{ type: string; paymentMethod: 'cash' | 'transfer' | 'credit'; total: number }>);
 
-  // Calculate profitability
-  const profitability = summarizeProfitability(allSales);
-
   // Calculate movements
   const movements = await CashMovementModel.find({ cashShift: cashShift._id, school: schoolId }).lean();
   const movementAggregated = buildMovementAggregated(movements.map(m => ({
@@ -147,10 +144,6 @@ export async function closeCashShift(
     cashInTotal: movementAggregated.cashInTotal,
     cashOutTotal: movementAggregated.cashOutTotal,
     netMovements: movementAggregated.netMovements,
-    revenue: profitability.revenue,
-    cogs: profitability.cogs,
-    grossProfit: profitability.grossProfit,
-    grossMarginPercent: profitability.grossMarginPercent,
   };
 }
 
@@ -192,9 +185,6 @@ export async function getCashShiftDetail(schoolId: string, cashShiftId: string):
     cashShift.difference
   );
 
-  // Rentabilidad
-  const profitability = summarizeProfitability(allSales);
-
   return {
     shift: {
       id: String(cashShift._id),
@@ -221,7 +211,6 @@ export async function getCashShiftDetail(schoolId: string, cashShiftId: string):
       })),
       aggregated: movementAggregated,
     },
-    profitability,
   };
 }
 
@@ -309,10 +298,6 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
     cashOutTotal: number;
     netMovements: number;
     movementsCount: number;
-    revenue: number;
-    cogs: number;
-    grossProfit: number;
-    grossMarginPercent: number | null;
   } | null;
 }> {
   const cashShift = await CashShiftModel.findOne({ seller: sellerId, school: schoolId, status: 'open' }).lean();
@@ -354,9 +339,6 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
   );
   const expectedCash = expectedCashRaw ?? (cashShift.openingAmount + salesTotals.cashTotal - salesTotals.returnsCashTotal - movementAggregated.cashOutTotal + movementAggregated.cashInTotal);
 
-  // Profitability summary
-  const profitability = summarizeProfitability(allSales);
-
   return {
     cashShift: withId(cashShift) as CashShiftLean,
     aggregated: {
@@ -375,10 +357,6 @@ export async function getActiveCashShiftWithDetails(schoolId: string, sellerId: 
       cashOutTotal: movementAggregated.cashOutTotal,
       netMovements: movementAggregated.netMovements,
       movementsCount: movementAggregated.movementsCount,
-      revenue: profitability.revenue,
-      cogs: profitability.cogs,
-      grossProfit: profitability.grossProfit,
-      grossMarginPercent: profitability.grossMarginPercent,
     },
   };
 }
@@ -406,7 +384,6 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
 
   const cashSalesTotal = salesTotals.cashTotal;
   const transferSalesTotal = salesTotals.transferTotal;
-  const returnsTotal = salesTotals.returnsTotal;
   const returnsCashTotal = salesTotals.returnsCashTotal;
   const creditPaymentsTotal = creditMovements.reduce((s, m) => s + m.amount, 0);
 
@@ -417,9 +394,6 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
     .filter(m => m.type === 'out')
     .reduce((sum, m) => sum + m.amount, 0);
   const netMovements = cashInTotal - cashOutTotal;
-
-  // Profitability summary
-  const profitability = summarizeProfitability(sales);
 
   // totalExpected = opening + cash sales - returns cash + credit payments - cash out + cash in
   const totalExpected = totalOpening + cashSalesTotal - returnsCashTotal + creditPaymentsTotal - cashOutTotal + cashInTotal;
@@ -437,15 +411,11 @@ export async function getDailySummary(schoolId: string, date?: Date): Promise<Da
     totalOpening,
     cashSales: cashSalesTotal,
     transferSales: transferSalesTotal,
-    returns: returnsTotal,
+    returns: returnsCashTotal,
     creditPayments: creditPaymentsTotal,
     cashInTotal,
     cashOutTotal,
     netMovements,
-    revenue: profitability.revenue,
-    cogs: profitability.cogs,
-    grossProfit: profitability.grossProfit,
-    grossMarginPercent: profitability.grossMarginPercent,
     totalExpected,
     finalCount,
     difference,

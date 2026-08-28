@@ -3,6 +3,10 @@ import { ProductModel } from '../../models/Product/index.js';
 import { ClientModel } from '../../models/Client/index.js';
 import { CashShiftModel } from '../../models/CashShift/index.js';
 import { CreditMovementModel } from '../../models/CreditMovement/index.js';
+import { cogs, grossProfit, grossMarginPercent } from '../../utils/profit.js';
+import { getLowStockProducts } from '../Products/index.js';
+import { getCreditsSummary } from '../Credits/index.js';
+import type { ProductLean } from '../../models/Product/index.js';
 
 export interface TodayKPIs {
   totalSales: number;
@@ -59,6 +63,36 @@ export interface CashShiftSummary {
   closingAmount?: number;
   difference?: number;
   status: 'open' | 'closed';
+}
+
+export interface DashboardOverview {
+  range: { from: string; to: string; days: number };
+  sales: {
+    count: number;
+    total: number;
+    cash: number;
+    transfer: number;
+    credit: number;
+    avgTicket: number;
+    productsSold: number;
+  };
+  returns: { count: number; amount: number };
+  profitability: {
+    revenue: number;
+    cogs: number;
+    grossProfit: number;
+    grossMarginPercent: number | null;
+  };
+  series: {
+    labels: string[];
+    total: number[];
+  };
+  topProducts: TopProduct[];
+  lowStock: ProductLean[];
+  credit: {
+    totalOutstanding: number;
+    clientsWithDebt: number;
+  };
 }
 
 export async function getTodayKPIs(schoolId: string): Promise<TodayKPIs> {
@@ -298,4 +332,125 @@ export async function getShifts(schoolId: string, fromDate?: Date, toDate?: Date
     difference: s.difference,
     status: s.status,
   }));
+}
+
+function getRange(from?: Date, to?: Date): { from: Date; to: Date } {
+  const end = to ?? new Date();
+  end.setHours(23, 59, 59, 999);
+  const start = from ?? new Date();
+  start.setHours(0, 0, 0, 0);
+  return { from: start, to: end };
+}
+
+function daysBetween(from: Date, to: Date): number {
+  const diff = to.getTime() - from.getTime();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+}
+
+export async function getOverview(
+  schoolId: string,
+  from?: Date,
+  to?: Date
+): Promise<DashboardOverview> {
+  const { from: startDate, to: endDate } = getRange(from, to);
+  const days = daysBetween(startDate, endDate);
+
+  const [sales, returns, lowStock, creditSummary] = await Promise.all([
+    SaleModel.find({
+      school: schoolId,
+      createdAt: { $gte: startDate, $lte: endDate },
+      voided: false,
+      type: 'sale',
+    }).lean(),
+    SaleModel.find({
+      school: schoolId,
+      createdAt: { $gte: startDate, $lte: endDate },
+      voided: false,
+      type: 'return',
+    }).lean(),
+    getLowStockProducts(schoolId),
+    getCreditsSummary(schoolId),
+  ]);
+
+  const salesCount = sales.length;
+  const salesTotal = sales.reduce((sum, s) => sum + s.total, 0);
+  const cashTotal = sales.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.total, 0);
+  const transferTotal = sales.filter(s => s.paymentMethod === 'transfer').reduce((sum, s) => sum + s.total, 0);
+  const creditTotal = sales.filter(s => s.paymentMethod === 'credit').reduce((sum, s) => sum + s.total, 0);
+  const avgTicket = salesCount > 0 ? salesTotal / salesCount : 0;
+  const productsSold = sales.reduce((sum, s) => sum + s.items.reduce((isum, i) => isum + i.quantity, 0), 0);
+
+  const returnsCount = returns.length;
+  const returnsAmount = returns.reduce((sum, r) => sum + Math.abs(r.total), 0);
+
+  const salesCogs = sales.reduce((sum, s) => sum + cogs(s.items as Array<{ unitCost?: number; quantity: number }>), 0);
+  const returnsCogs = returns.reduce((sum, r) => sum + cogs(r.items as Array<{ unitCost?: number; quantity: number }>), 0);
+  const revenue = salesTotal - returnsAmount;
+  const cost = salesCogs - returnsCogs;
+  const gp = grossProfit(revenue, cost);
+  const gm = grossMarginPercent(revenue, cost);
+
+  const labels: string[] = [];
+  const seriesTotal: number[] = [];
+  for (let i = 0; i < days; i++) {
+    const date = new Date(startDate);
+    date.setDate(date.getDate() + i);
+    const dayStr = date.toISOString().split('T')[0] ?? '';
+    labels.push(dayStr);
+    const daySales = sales.filter(s => s.createdAt.toISOString().split('T')[0] === dayStr);
+    const dayTotal = daySales.reduce((sum, s) => sum + s.total, 0);
+    seriesTotal.push(dayTotal);
+  }
+
+  const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
+  for (const sale of sales) {
+    for (const item of sale.items) {
+      const key = item.product.toString();
+      const existing = productMap.get(key) || { name: item.name, quantity: 0, revenue: 0 };
+      existing.quantity += item.quantity;
+      existing.revenue += item.subtotal;
+      productMap.set(key, existing);
+    }
+  }
+  const topProducts = Array.from(productMap.entries())
+    .map(([productId, data]) => ({ productId, ...data }))
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 5);
+
+  return {
+    range: {
+      from: startDate.toISOString(),
+      to: endDate.toISOString(),
+      days,
+    },
+    sales: {
+      count: salesCount,
+      total: salesTotal,
+      cash: cashTotal,
+      transfer: transferTotal,
+      credit: creditTotal,
+      avgTicket,
+      productsSold,
+    },
+    returns: {
+      count: returnsCount,
+      amount: returnsAmount,
+    },
+    profitability: {
+      revenue,
+      cogs: cost,
+      grossProfit: gp,
+      grossMarginPercent: gm,
+    },
+    series: {
+      labels,
+      total: seriesTotal,
+    },
+    topProducts,
+    lowStock,
+    credit: {
+      totalOutstanding: creditSummary.totalOutstanding,
+      clientsWithDebt: creditSummary.clientsWithDebt,
+    },
+  };
 }
