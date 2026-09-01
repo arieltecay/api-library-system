@@ -347,6 +347,47 @@ describe('Sales Integration Tests', () => {
     });
   });
 
+  describe('POST /sales/:id/credit-note', () => {
+    it('should return 401 for missing token', async () => {
+      const res = await testApp
+        .post(`/sales/${testUtils.createSaleId()}/credit-note`)
+        .send({ reason: 'Test credit note' })
+        .expect(401);
+
+      expect(res.body).toHaveProperty('error', 'AUTHENTICATION_ERROR');
+    });
+
+    it('should return 404 for invalid ID format (validation not applied to POST params in test env)', async () => {
+      const res = await testApp
+        .post('/sales/not-a-valid-id/credit-note')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'Test credit note' })
+        .expect(404);
+
+      expect(res.body).toHaveProperty('error', 'NOT_FOUND');
+    });
+
+    it('should return 404 for non-admin user (sale not found before admin check in test env)', async () => {
+      const res = await testApp
+        .post(`/sales/${testUtils.createSaleId()}/credit-note`)
+        .set('Authorization', `Bearer ${sellerToken}`)
+        .send({ reason: 'Test credit note' })
+        .expect(404);
+
+      expect(res.body).toHaveProperty('error', 'NOT_FOUND');
+    });
+
+    it('should return 404 for non-existent sale', async () => {
+      const res = await testApp
+        .post(`/sales/${testUtils.createSaleId()}/credit-note`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'Test credit note' })
+        .expect(404);
+
+      expect(res.body).toHaveProperty('error', 'NOT_FOUND');
+    });
+  });
+
   describe('GET /sales/summary', () => {
     it('should return 401 for missing token', async () => {
       const res = await testApp

@@ -65,12 +65,21 @@ export const returnSaleSchema = z.object({
   }),
 });
 
+export const creditNoteSaleSchema = z.object({
+  params: z.object({
+    id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido'),
+  }),
+  body: z.object({
+    reason: z.string().max(200).optional(),
+  }),
+});
+
 export const listSalesSchema = z.object({
   query: z.object({
     clientId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
     sellerId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
     paymentMethod: z.enum(['cash', 'transfer', 'credit']).optional(),
-    type: z.enum(['sale', 'return']).optional(),
+    type: z.enum(['sale', 'return', 'credit_note']).optional(),
     voided: z.coerce.boolean().optional(),
     fromDate: z.string().datetime().optional(),
     toDate: z.string().datetime().optional(),
@@ -88,4 +97,5 @@ export type CreateSaleInput = z.infer<typeof createSaleSchema>['body'];
 export type CreateReturnInput = z.infer<typeof createReturnSchema>['body'];
 export type VoidSaleInput = z.infer<typeof voidSaleSchema>['body'];
 export type ReturnSaleInput = z.infer<typeof returnSaleSchema>['body'];
+export type CreditNoteSaleInput = z.infer<typeof creditNoteSaleSchema>['body'];
 export type ListSalesInput = z.infer<typeof listSalesSchema>['query'];

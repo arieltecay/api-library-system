@@ -8,6 +8,7 @@ import {
   createReturnSchema,
   voidSaleSchema,
   returnSaleSchema,
+  creditNoteSaleSchema,
   listSalesSchema,
 } from '../../Controllers/Sales/types.js';
 import { authMiddleware, requireAdmin } from '../../middleware/auth.js';
@@ -30,5 +31,6 @@ router.get('/summary', salesController.getSalesSummary);
 router.get('/:id', validate(idParamSchema), salesController.getSale);
 router.post('/:id/void', requireAdmin, validate(voidSaleSchema), salesController.voidSale);
 router.post('/:id/return', requireAdmin, validate(returnSaleSchema), salesController.returnSale);
+router.post('/:id/credit-note', requireAdmin, validate(creditNoteSaleSchema), salesController.creditNoteSale);
 
 export default router;

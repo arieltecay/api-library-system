@@ -2,7 +2,7 @@ import mongoose, { Document, Schema, Types } from 'mongoose';
 import { env } from '../../config/env.js';
 
 export type PaymentMethod = 'cash' | 'transfer' | 'credit';
-export type SaleType = 'sale' | 'return';
+export type SaleType = 'sale' | 'return' | 'credit_note';
 
 export interface ISale extends Document {
   items: Array<{
@@ -59,7 +59,7 @@ const saleSchema = new Schema<ISale>(
       enum: ['cash', 'transfer', 'credit'],
       required: true,
     },
-    type: { type: String, enum: ['sale', 'return'], required: true, default: 'sale' },
+    type: { type: String, enum: ['sale', 'return', 'credit_note'], required: true, default: 'sale' },
     client: { type: Schema.Types.ObjectId, ref: 'Client' },
     seller: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     cashShift: { type: Schema.Types.ObjectId, ref: 'CashShift', required: true },

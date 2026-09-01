@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as salesService from '../../Services/Sales/index.js';
+import type { CreditNoteSaleInput } from './types.ts';
 
 export async function previewSale(req: Request, res: Response): Promise<void> {
   const { items, clientId, discount, paymentMethod, amountReceived } = req.body;
@@ -98,4 +99,12 @@ export async function returnSale(req: Request, res: Response): Promise<void> {
   const { reason, items, method } = req.body;
   const result = await salesService.returnSale(req.schoolId!, id, req.user.sub, reason, items, method);
   res.json(result);
+}
+
+export async function creditNoteSale(req: Request, res: Response): Promise<void> {
+  if (!req.user) throw new Error('Usuario no autenticado');
+  const id = req.params.id as string;
+  const { reason } = req.body as CreditNoteSaleInput;
+  const result = await salesService.createCreditNote(req.schoolId!, id, req.user.sub, reason);
+  res.status(201).json(result);
 }

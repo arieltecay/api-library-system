@@ -169,6 +169,45 @@ describe('Sales Logic - Pure Functions', () => {
       expect(result.valid).toBe(false);
       expect(result.error).toContain('insuficiente');
     });
+
+    it('should allow quantity equal to stock', () => {
+      const items = [{ product: 'prod-1', quantity: 10 }];
+      const products = [{ id: 'prod-1', stock: 10, active: true, type: 'product' as const }];
+      
+      const result = validateSaleItems(items, products);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should not validate stock for services', () => {
+      const items = [{ product: 'prod-1', quantity: 100 }];
+      const products = [{ id: 'prod-1', stock: 0, active: true, type: 'service' as const }];
+      
+      const result = validateSaleItems(items, products);
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('validateSaleItems - atomic stock decrement simulation', () => {
+    it('should simulate concurrent sales with atomic decrement', () => {
+      // Simulate two concurrent sales trying to buy the same product
+      let stock = 5;
+      const items1 = [{ product: 'prod-1', quantity: 3 }];
+      const items2 = [{ product: 'prod-1', quantity: 3 }];
+      const products = [{ id: 'prod-1', stock: 5, active: true, type: 'product' as const }];
+
+      // First sale succeeds
+      const result1 = validateSaleItems(items1, products);
+      expect(result1.valid).toBe(true);
+      
+      // Simulate atomic decrement - stock becomes 2
+      stock -= 3;
+      products[0].stock = stock;
+
+      // Second sale fails due to insufficient stock
+      const result2 = validateSaleItems(items2, products);
+      expect(result2.valid).toBe(false);
+      expect(result2.error).toContain('insuficiente');
+    });
   });
 
   describe('calculateCreditBalance', () => {

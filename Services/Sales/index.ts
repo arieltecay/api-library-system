@@ -8,88 +8,18 @@ import { CreditMovementModel } from '../../models/CreditMovement/index.js';
 import type { CreditMovementLean } from '../../models/CreditMovement/index.js';
 import { NotFoundError, ConflictError, ValidationError } from '../../utils/errors.js';
 import { withId, withIds } from '../../utils/lean.js';
-
-export type ReturnMethod = 'cash' | 'transfer' | 'credit';
-
-export interface CreateReturnParams {
-  schoolId: string;
-  sellerId: string;
-  cashShiftId: string;
-  items: Array<{ product: string; quantity: number }>;
-  clientId?: string;
-  method: ReturnMethod;
-}
-
-export interface SalePreviewResult {
-  items: Array<{
-    product: string;
-    name: string;
-    type: 'product' | 'service';
-    quantity: number;
-    unitPrice: number;
-    unitCost?: number;
-    subtotal: number;
-  }>;
-  subtotal: number;
-  discount: number;
-  total: number;
-  amountReceived?: number;
-  change?: number;
-  paymentMethod: PaymentMethod;
-  creditBalanceAfter?: number;
-}
-
-export interface SaleResult {
-  sale: SaleLean;
-  creditMovement?: CreditMovementLean;
-}
-
-export interface SaleItemInfo {
-  product: string;
-  name: string;
-  type: 'product' | 'service';
-  quantity: number;
-  unitPrice: number;
-  unitCost?: number;
-  subtotal: number;
-}
-
-export interface PopulatedClientInfo {
-  id: string;
-  fullName: string;
-  balance: number;
-}
-
-export interface PopulatedUserInfo {
-  id: string;
-  name: string;
-  role: string;
-}
-
-export type PopulatedSaleLean = Omit<SaleLean, 'client' | 'seller'> & {
-  number: number;
-  type: SaleType;
-  client?: PopulatedClientInfo | null;
-  seller: PopulatedUserInfo;
-  items: SaleItemInfo[];
-};
-
-export interface SaleListResult {
-  items: PopulatedSaleLean[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
-
-export interface SalesSummary {
-  salesToday: number;
-  salesGrowth: number;
-  totalRevenue: number;
-  returnsCount: number;
-  returnsAmount: number;
-  averageTicket: number;
-}
+import type { ClientSession } from 'mongoose';
+import type {
+  SaleItemForStockRestore,
+  SaleDocumentForVoid,
+  CreditReversalParams,
+  SalePreviewResult,
+  SaleResult,
+  SaleListResult,
+  PopulatedSaleLean,
+  SalesSummary,
+  CreateReturnParams,
+} from './types.js';
 
 export async function previewSale(
   schoolId: string,
@@ -124,6 +54,13 @@ export async function previewSale(
       throw new ValidationError(`Producto no disponible: ${product.name}`);
     }
 
+    // Validate stock for products (not services)
+    if (product.type === 'product' && product.stock < item.quantity) {
+      throw new ValidationError(
+        `Stock insuficiente para "${product.name}": solicitado ${item.quantity}, disponible ${product.stock}`
+      );
+    }
+
     const unitPrice = product.price;
     const itemSubtotal = unitPrice * item.quantity;
     subtotal += itemSubtotal;
@@ -136,6 +73,7 @@ export async function previewSale(
       unitPrice,
       unitCost: product.cost ?? 0,
       subtotal: itemSubtotal,
+      availableStock: product.type === 'product' ? product.stock : undefined,
     });
   }
 
@@ -194,13 +132,21 @@ export async function createSale(
   session.startTransaction();
 
   try {
-    // Update product stock
+    // Update product stock atomically to prevent race conditions
     for (const item of items) {
       const product = await ProductModel.findOne({ _id: item.product, school: schoolId }).session(session);
       if (!product) throw new Error(`Product not found: ${item.product}`);
       if (product.type === 'product') {
-        product.stock -= item.quantity;
-        await product.save({ session });
+        const updated = await ProductModel.findOneAndUpdate(
+          { _id: item.product, school: schoolId, stock: { $gte: item.quantity } },
+          { $inc: { stock: -item.quantity } },
+          { session, new: true }
+        );
+        if (!updated) {
+          // Re-fetch to get current stock for error message
+          const current = await ProductModel.findOne({ _id: item.product, school: schoolId }).session(session);
+          throw new ValidationError(`Stock insuficiente para "${product.name}": solicitado ${item.quantity}, disponible ${current?.stock ?? 0}`);
+        }
       }
     }
 
@@ -276,8 +222,8 @@ export async function voidSale(schoolId: string, saleId: string, adminId: string
   if (sale.voided) {
     throw new ConflictError('La venta ya está anulada');
   }
-  if (sale.type === 'return') {
-    throw new ValidationError('No se puede anular una devolución');
+  if (sale.type === 'return' || sale.type === 'credit_note') {
+    throw new ValidationError('No se puede anular una devolución ni una nota de crédito');
   }
 
   const session = await SaleModel.db.startSession();
@@ -344,8 +290,8 @@ export async function returnSale(
   if (originalSale.voided) {
     throw new ConflictError('No se puede devolver una venta anulada');
   }
-  if (originalSale.type === 'return') {
-    throw new ValidationError('No se puede devolver una devolución');
+  if (originalSale.type === 'return' || originalSale.type === 'credit_note') {
+    throw new ValidationError('No se puede devolver una devolución ni una nota de crédito');
   }
 
   // Validate return items against original sale
@@ -466,7 +412,7 @@ export async function listSales(params: {
   clientId?: string;
   sellerId?: string;
   paymentMethod?: 'cash' | 'transfer' | 'credit';
-  type?: 'sale' | 'return';
+  type?: 'sale' | 'return' | 'credit_note';
   voided?: boolean;
   fromDate?: Date;
   toDate?: Date;
@@ -681,6 +627,139 @@ export async function createReturn(params: CreateReturnParams): Promise<SaleResu
     return {
       sale: sale[0]!.toJSON() as SaleLean,
       creditMovement: creditMovement?.[0]?.toJSON() as CreditMovementLean,
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+}
+
+async function restoreStockForItems(
+  items: SaleItemForStockRestore[],
+  schoolId: string,
+  session: ClientSession
+): Promise<void> {
+  for (const item of items) {
+    if (item.type === 'product') {
+      const product = await ProductModel.findOne({ _id: item.product, school: schoolId }).session(session);
+      if (product) {
+        product.stock += item.quantity;
+        await product.save({ session });
+      }
+    }
+  }
+}
+
+async function reverseCreditForVoid(
+  params: CreditReversalParams
+): Promise<CreditMovementLean | undefined> {
+  const { sale, schoolId, adminId, reason, session } = params;
+  if (sale.paymentMethod === 'credit' && !sale.settled && sale.client) {
+    const client = await ClientModel.findOne({ _id: sale.client, school: schoolId }).session(session);
+    if (client) {
+      client.balance -= sale.total;
+      await client.save({ session });
+
+      const creditMovement = await CreditMovementModel.create([{
+        client: sale.client,
+        sale: sale._id,
+        school: schoolId,
+        type: 'payment',
+        amount: sale.total,
+        balanceAfter: client.balance,
+        method: 'cash',
+        note: `Nota de crédito: ${reason}`,
+        admin: adminId,
+      }], { session });
+
+      return creditMovement[0]?.toJSON() as CreditMovementLean;
+    }
+  }
+  return undefined;
+}
+
+export async function createCreditNote(
+  schoolId: string,
+  saleId: string,
+  adminId: string,
+  reason?: string
+): Promise<SaleResult> {
+  const originalSale = await SaleModel.findOne({ _id: saleId, school: schoolId });
+  if (!originalSale) {
+    throw new NotFoundError('Venta no encontrada');
+  }
+  if (originalSale.voided) {
+    throw new ConflictError('La venta ya está anulada');
+  }
+  if (originalSale.type !== 'sale') {
+    throw new ValidationError('Solo se puede emitir nota de crédito sobre una venta');
+  }
+
+  const session = await SaleModel.db.startSession();
+  session.startTransaction();
+
+  try {
+    // 1. Restaurar stock
+    const itemsForStockRestore: SaleItemForStockRestore[] = originalSale.items.map(i => ({
+      product: i.product.toString(),
+      quantity: i.quantity,
+      type: i.type,
+    }));
+    await restoreStockForItems(itemsForStockRestore, schoolId, session);
+
+    // 2. Revertir crédito si aplica
+    await reverseCreditForVoid({
+      sale: originalSale as SaleDocumentForVoid,
+      schoolId,
+      adminId,
+      reason: reason || 'Nota de crédito',
+      session,
+    });
+
+    // 3. Marcar venta original como anulada
+    originalSale.voided = true;
+    originalSale.voidedAt = new Date();
+    originalSale.voidReason = reason || 'Nota de crédito';
+    await originalSale.save({ session });
+
+    // 4. Generar número secuencial
+    const lastNumber = await SaleModel.findOne({ school: schoolId }, { number: 1 }).sort({ number: -1 }).session(session);
+    const nextNumber = (lastNumber?.number ?? 0) + 1;
+
+    // 5. Crear la nota de crédito
+    const creditNote = await SaleModel.create([{
+      items: originalSale.items.map(i => ({
+        product: i.product,
+        name: i.name,
+        type: i.type,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        unitCost: i.unitCost,
+        subtotal: i.subtotal,
+      })),
+      number: nextNumber,
+      subtotal: originalSale.subtotal,
+      discount: originalSale.discount,
+      total: originalSale.total,
+      amountReceived: 0,
+      change: 0,
+      paymentMethod: originalSale.paymentMethod,
+      type: 'credit_note',
+      client: originalSale.client,
+      seller: adminId,
+      cashShift: originalSale.cashShift,
+      school: schoolId,
+      originalSale: originalSale._id,
+      settled: true,
+      voided: false,
+    }], { session });
+
+    await session.commitTransaction();
+
+    return {
+      sale: creditNote[0]!.toJSON() as SaleLean,
     };
   } catch (error) {
     await session.abortTransaction();
