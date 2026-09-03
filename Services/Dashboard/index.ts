@@ -1,99 +1,28 @@
 import { SaleModel } from '../../models/Sale/index.js';
-import { ProductModel } from '../../models/Product/index.js';
-import { ClientModel } from '../../models/Client/index.js';
 import { CashShiftModel } from '../../models/CashShift/index.js';
-import { CreditMovementModel } from '../../models/CreditMovement/index.js';
-import { cogs, grossProfit, grossMarginPercent } from '../../utils/profit.js';
 import { getLowStockProducts } from '../Products/index.js';
 import { getCreditsSummary } from '../Credits/index.js';
-import type { ProductLean } from '../../models/Product/index.js';
-
-export interface TodayKPIs {
-  totalSales: number;
-  totalAmount: number;
-  cashAmount: number;
-  transferAmount: number;
-  creditAmount: number;
-  returnsCount: number;
-  returnsAmount: number;
-  avgTicket: number;
-  productsSold: number;
-  yesterdayAmount: number;
-  yesterdayReturns: number;
-  yesterdayCount: number;
-}
-
-export interface SalesChartData {
-  labels: string[];
-  datasets: {
-    cash: number[];
-    transfer: number[];
-    credit: number[];
-    total: number[];
-  };
-}
-
-export interface TopProduct {
-  productId: string;
-  name: string;
-  quantity: number;
-  revenue: number;
-}
-
-export interface DailyClosing {
-  date: string;
-  totalSales: number;
-  cashSales: number;
-  transferSales: number;
-  creditSales: number;
-  totalChange: number;
-  shifts: CashShiftSummary[];
-  expectedCash: number;
-  countedCash: number;
-  difference: number;
-}
-
-export interface CashShiftSummary {
-  id: string;
-  seller: string;
-  openedAt: string;
-  closedAt?: string;
-  openingAmount: number;
-  expectedAmount: number;
-  closingAmount?: number;
-  difference?: number;
-  status: 'open' | 'closed';
-}
-
-export interface DashboardOverview {
-  range: { from: string; to: string; days: number };
-  sales: {
-    count: number;
-    total: number;
-    cash: number;
-    transfer: number;
-    credit: number;
-    avgTicket: number;
-    productsSold: number;
-  };
-  returns: { count: number; amount: number };
-  profitability: {
-    revenue: number;
-    cogs: number;
-    grossProfit: number;
-    grossMarginPercent: number | null;
-  };
-  series: {
-    labels: string[];
-    total: number[];
-  };
-  topProducts: TopProduct[];
-  lowStock: ProductLean[];
-  credit: {
-    totalOutstanding: number;
-    clientsWithDebt: number;
-  };
-}
+import {
+  aggregateSales,
+  aggregateReturns,
+  calculateProfitability,
+  buildSeries,
+  aggregateTopProducts,
+  getRange,
+  daysBetween,
+  calculateSalesCogs,
+  calculateReturnsCogs,
+  type SaleLike,
+  type ReturnLike,
+} from './dashboard-logic.js';
+import type {
+  TodayKPIs,
+  SalesChartData,
+  TopProduct,
+  DailyClosing,
+  CashShiftSummary,
+  DashboardOverview,
+} from './types.js';
 
 export async function getTodayKPIs(schoolId: string): Promise<TodayKPIs> {
   const today = new Date();
@@ -120,7 +49,6 @@ export async function getTodayKPIs(schoolId: string): Promise<TodayKPIs> {
   const avgTicket = totalSales > 0 ? totalAmount / totalSales : 0;
   const productsSold = salesOnly.reduce((sum, s) => sum + s.items.reduce((isum, i) => isum + i.quantity, 0), 0);
 
-  // Yesterday metrics for growth comparison
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdaySales = await SaleModel.find({
@@ -285,7 +213,6 @@ export async function getDailyClosing(schoolId: string, date?: string): Promise<
     if (s.status === 'closed' && s.closingAmount !== undefined) {
       return sum + s.closingAmount;
     }
-    // For open shifts, use expected amount
     const shiftCashSales = salesOnly.filter(sale => sale.cashShift.toString() === s._id.toString() && sale.paymentMethod === 'cash');
     const shiftCashTotal = shiftCashSales.reduce((sum, sale) => sum + sale.total, 0);
     return sum + (s.openingAmount + shiftCashTotal);
@@ -334,19 +261,6 @@ export async function getShifts(schoolId: string, fromDate?: Date, toDate?: Date
   }));
 }
 
-function getRange(from?: Date, to?: Date): { from: Date; to: Date } {
-  const end = to ?? new Date();
-  end.setHours(23, 59, 59, 999);
-  const start = from ?? new Date();
-  start.setHours(0, 0, 0, 0);
-  return { from: start, to: end };
-}
-
-function daysBetween(from: Date, to: Date): number {
-  const diff = to.getTime() - from.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
-}
-
 export async function getOverview(
   schoolId: string,
   from?: Date,
@@ -372,50 +286,17 @@ export async function getOverview(
     getCreditsSummary(schoolId),
   ]);
 
-  const salesCount = sales.length;
-  const salesTotal = sales.reduce((sum, s) => sum + s.total, 0);
-  const cashTotal = sales.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.total, 0);
-  const transferTotal = sales.filter(s => s.paymentMethod === 'transfer').reduce((sum, s) => sum + s.total, 0);
-  const creditTotal = sales.filter(s => s.paymentMethod === 'credit').reduce((sum, s) => sum + s.total, 0);
-  const avgTicket = salesCount > 0 ? salesTotal / salesCount : 0;
-  const productsSold = sales.reduce((sum, s) => sum + s.items.reduce((isum, i) => isum + i.quantity, 0), 0);
+  const salesAgg = aggregateSales(sales as SaleLike[]);
+  const returnsAgg = aggregateReturns(returns as ReturnLike[]);
 
-  const returnsCount = returns.length;
-  const returnsAmount = returns.reduce((sum, r) => sum + Math.abs(r.total), 0);
-
-  const salesCogs = sales.reduce((sum, s) => sum + cogs(s.items as Array<{ unitCost?: number; quantity: number }>), 0);
-  const returnsCogs = returns.reduce((sum, r) => sum + cogs(r.items as Array<{ unitCost?: number; quantity: number }>), 0);
-  const revenue = salesTotal - returnsAmount;
+  const salesCogs = calculateSalesCogs(sales as SaleLike[]);
+  const returnsCogs = calculateReturnsCogs(returns as ReturnLike[]);
+  const revenue = salesAgg.total - returnsAgg.amount;
   const cost = salesCogs - returnsCogs;
-  const gp = grossProfit(revenue, cost);
-  const gm = grossMarginPercent(revenue, cost);
+  const profitability = calculateProfitability(revenue, cost);
 
-  const labels: string[] = [];
-  const seriesTotal: number[] = [];
-  for (let i = 0; i < days; i++) {
-    const date = new Date(startDate);
-    date.setDate(date.getDate() + i);
-    const dayStr = date.toISOString().split('T')[0] ?? '';
-    labels.push(dayStr);
-    const daySales = sales.filter(s => s.createdAt.toISOString().split('T')[0] === dayStr);
-    const dayTotal = daySales.reduce((sum, s) => sum + s.total, 0);
-    seriesTotal.push(dayTotal);
-  }
-
-  const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
-  for (const sale of sales) {
-    for (const item of sale.items) {
-      const key = item.product.toString();
-      const existing = productMap.get(key) || { name: item.name, quantity: 0, revenue: 0 };
-      existing.quantity += item.quantity;
-      existing.revenue += item.subtotal;
-      productMap.set(key, existing);
-    }
-  }
-  const topProducts = Array.from(productMap.entries())
-    .map(([productId, data]) => ({ productId, ...data }))
-    .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, 5);
+  const series = buildSeries(sales as SaleLike[], startDate, endDate);
+  const topProducts = aggregateTopProducts(sales as SaleLike[], 5);
 
   return {
     range: {
@@ -423,29 +304,10 @@ export async function getOverview(
       to: endDate.toISOString(),
       days,
     },
-    sales: {
-      count: salesCount,
-      total: salesTotal,
-      cash: cashTotal,
-      transfer: transferTotal,
-      credit: creditTotal,
-      avgTicket,
-      productsSold,
-    },
-    returns: {
-      count: returnsCount,
-      amount: returnsAmount,
-    },
-    profitability: {
-      revenue,
-      cogs: cost,
-      grossProfit: gp,
-      grossMarginPercent: gm,
-    },
-    series: {
-      labels,
-      total: seriesTotal,
-    },
+    sales: salesAgg,
+    returns: returnsAgg,
+    profitability,
+    series,
     topProducts,
     lowStock,
     credit: {

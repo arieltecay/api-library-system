@@ -1,4 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import {
+  aggregateSales,
+  aggregateReturns,
+  calculateProfitability,
+  buildSeries,
+  aggregateTopProducts,
+  getRange,
+  daysBetween,
+} from '../../../../Services/Dashboard/dashboard-logic.js';
 
 describe('Dashboard Overview Logic - Pure Functions', () => {
   describe('aggregateSales', () => {
@@ -147,7 +156,6 @@ describe('Dashboard Overview Logic - Pure Functions', () => {
       const result = aggregateTopProducts(sales, 3);
 
       expect(result).toHaveLength(3);
-      // Sorted by quantity desc: prod3 (10), prod1 (8), prod2 (2)
       expect(result[0]).toEqual({ productId: 'prod3', name: 'Product C', quantity: 10, revenue: 10000 });
       expect(result[1]).toEqual({ productId: 'prod1', name: 'Product A', quantity: 8, revenue: 8000 });
       expect(result[2]).toEqual({ productId: 'prod2', name: 'Product B', quantity: 2, revenue: 2000 });
@@ -217,98 +225,3 @@ describe('Dashboard Overview Logic - Pure Functions', () => {
     });
   });
 });
-
-// Pure functions for testing
-interface SaleItem {
-  product: string;
-  name: string;
-  quantity: number;
-  subtotal: number;
-  unitCost?: number;
-}
-
-interface Sale {
-  total: number;
-  paymentMethod: 'cash' | 'transfer' | 'credit';
-  items: SaleItem[];
-  createdAt: Date;
-}
-
-interface Return {
-  total: number;
-  items: SaleItem[];
-}
-
-function aggregateSales(sales: Sale[]) {
-  const count = sales.length;
-  const total = sales.reduce((sum, s) => sum + s.total, 0);
-  const cash = sales.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.total, 0);
-  const transfer = sales.filter(s => s.paymentMethod === 'transfer').reduce((sum, s) => sum + s.total, 0);
-  const credit = sales.filter(s => s.paymentMethod === 'credit').reduce((sum, s) => sum + s.total, 0);
-  const avgTicket = count > 0 ? total / count : 0;
-  const productsSold = sales.reduce((sum, s) => sum + s.items.reduce((isum, i) => isum + i.quantity, 0), 0);
-
-  return { count, total, cash, transfer, credit, avgTicket, productsSold };
-}
-
-function aggregateReturns(returns: Return[]) {
-  const count = returns.length;
-  const amount = returns.reduce((sum, r) => sum + Math.abs(r.total), 0);
-  return { count, amount };
-}
-
-function calculateProfitability(revenue: number, cost: number) {
-  const grossProfit = revenue - cost;
-  const grossMarginPercent = revenue <= 0 ? null : (grossProfit / revenue) * 100;
-  return { revenue, cogs: cost, grossProfit, grossMarginPercent };
-}
-
-function buildSeries(sales: { createdAt: Date; total: number }[], startDate: Date, endDate: Date) {
-  const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  const labels: string[] = [];
-  const total: number[] = [];
-
-  for (let i = 0; i < days; i++) {
-    const date = new Date(startDate);
-    date.setDate(date.getDate() + i);
-    const dayStr = date.toISOString().split('T')[0] ?? '';
-    labels.push(dayStr);
-    const daySales = sales.filter(s => s.createdAt.toISOString().split('T')[0] === dayStr);
-    const dayTotal = daySales.reduce((sum, s) => sum + s.total, 0);
-    total.push(dayTotal);
-  }
-
-  return { labels, total };
-}
-
-function aggregateTopProducts(sales: Sale[], limit: number) {
-  const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
-
-  for (const sale of sales) {
-    for (const item of sale.items) {
-      const key = item.product.toString();
-      const existing = productMap.get(key) || { name: item.name, quantity: 0, revenue: 0 };
-      existing.quantity += item.quantity;
-      existing.revenue += item.subtotal;
-      productMap.set(key, existing);
-    }
-  }
-
-  return Array.from(productMap.entries())
-    .map(([productId, data]) => ({ productId, ...data }))
-    .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, limit);
-}
-
-function getRange(from?: Date, to?: Date) {
-  const end = to ?? new Date();
-  end.setHours(23, 59, 59, 999);
-  const start = from ?? new Date();
-  start.setHours(0, 0, 0, 0);
-  return { from: start, to: end };
-}
-
-function daysBetween(from: Date, to: Date): number {
-  const diff = to.getTime() - from.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
-}
