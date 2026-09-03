@@ -36,9 +36,14 @@ export async function getShifts(req: Request, res: Response): Promise<void> {
   res.json(result);
 }
 
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export async function getOverview(req: Request, res: Response): Promise<void> {
-  const from = req.query.from ? new Date(req.query.from as string) : undefined;
-  const to = req.query.to ? new Date(req.query.to as string) : undefined;
+  const from = req.query.from ? parseLocalDate(req.query.from as string) : undefined;
+  const to = req.query.to ? parseLocalDate(req.query.to as string) : undefined;
   const result = await dashboardService.getOverview(req.schoolId!, from, to);
   res.json(result);
 }

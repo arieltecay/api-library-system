@@ -55,6 +55,12 @@ export interface CashShiftSummary {
   status: 'open' | 'closed';
 }
 
+export interface ClientDebt {
+  id: string;
+  fullName: string;
+  balance: number;
+}
+
 import type { ProductLean } from '../../models/Product/index.js';
 
 export interface DashboardOverview {
@@ -84,5 +90,6 @@ export interface DashboardOverview {
   credit: {
     totalOutstanding: number;
     clientsWithDebt: number;
+    clients: ClientDebt[];
   };
 }

@@ -170,6 +170,12 @@ export async function settleDebt(
   };
 }
 
+export interface ClientDebt {
+  id: string;
+  fullName: string;
+  balance: number;
+}
+
 export async function getCreditsSummary(schoolId: string): Promise<{
   totalOutstanding: number;
   clientsWithDebt: number;
@@ -177,6 +183,7 @@ export async function getCreditsSummary(schoolId: string): Promise<{
   totalPaymentsThisMonth: number;
   overdueCount: number;
   overdueAmount: number;
+  clients: ClientDebt[];
 }> {
   const [clients, movementsThisMonth] = await Promise.all([
     ClientModel.find({ school: schoolId, balance: { $gt: 0 }, active: true }).lean(),
@@ -211,6 +218,10 @@ export async function getCreditsSummary(schoolId: string): Promise<{
   const overdueClientIds = new Set(overdueSales.map(s => String(s.client)));
   const overdueCount = overdueClientIds.size;
 
+  const clientDebts: ClientDebt[] = clients
+    .sort((a, b) => b.balance - a.balance)
+    .map(c => ({ id: c.id, fullName: c.fullName, balance: c.balance }));
+
   return {
     totalOutstanding,
     clientsWithDebt,
@@ -218,6 +229,7 @@ export async function getCreditsSummary(schoolId: string): Promise<{
     totalPaymentsThisMonth: paymentsThisMonth,
     overdueCount,
     overdueAmount,
+    clients: clientDebts,
   };
 }
 

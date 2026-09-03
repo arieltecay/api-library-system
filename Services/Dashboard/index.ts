@@ -313,6 +313,7 @@ export async function getOverview(
     credit: {
       totalOutstanding: creditSummary.totalOutstanding,
       clientsWithDebt: creditSummary.clientsWithDebt,
+      clients: creditSummary.clients,
     },
   };
 }
