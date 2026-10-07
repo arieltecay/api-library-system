@@ -1,0 +1,40 @@
+name: Smoke Tests Staging
+
+# Se ejecuta cuando "CI/CD Pipeline" termina en develop (deploy a staging ya disparado)
+# o manualmente via workflow_dispatch.
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Smoke test API staging
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Wait for staging to be reachable
+        run: |
+          URL="${{ vars.STAGING_URL }}"
+          echo "Polling $URL ..."
+          for i in $(seq 1 40); do
+            if curl -sf "$URL/health" > /dev/null 2>&1; then
+              echo "Staging reachable after $((i * 15))s"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "ERROR: staging not reachable after 10 minutes"
+          exit 1
+
+      - name: Health endpoint returns ok
+        run: |
+          BODY=$(curl -sf "${{ vars.STAGING_URL }}/health")
+          echo "$BODY"
+          echo "$BODY" | grep -q '"status":"ok"' || echo "$BODY" | grep -q '"status": "ok"'
+
+      - name: Summary
+        run: echo "Smoke tests PASSED for ${{ vars.STAGING_URL }}"
