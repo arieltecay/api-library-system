@@ -139,7 +139,7 @@ jobs:
         uses: railwayapp/railway-deploy@v1
         with:
           token: ${{ secrets.RAILWAY_TOKEN }}
-          service: librarysystem-api-staging
+          service: api-core-system
           environment: staging
 
   deploy-production:
@@ -153,19 +153,23 @@ jobs:
         uses: railwayapp/railway-deploy@v1
         with:
           token: ${{ secrets.RAILWAY_TOKEN }}
-          service: librarysystem-api
+          service: api-core-system
           environment: production
 
   rollback:
-    name: Rollback Railway
+    name: Emergency Redeploy (Railway)
     needs: build
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.rollback == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     steps:
-      - name: Rollback Railway
-        run: |
-          SERVICE_NAME="${{ github.event.inputs.environment == 'production' && 'librarysystem-api' || 'librarysystem-api-staging' }}"
-          railway service "$SERVICE_NAME" rollback
+      # NOTA: Railway CLI no soporta "rollback" a un deployment especifico.
+      # `railway redeploy` redeploya el ULTIMO deployment del servicio (util como restart/recovery).
+      # Rollback real a version anterior: Railway Dashboard -> Service -> Deployments -> "Redeploy" en el deployment previo.
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Redeploy latest deployment
+        run: railway redeploy -s api-core-system -e ${{ github.event.inputs.environment }} -y
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
