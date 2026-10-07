@@ -135,12 +135,20 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      # Requiere secret RAILWAY_TOKEN = Railway ACCOUNT token (workspace "Core System's Projects")
+      # Project tokens estan scoped a UN solo environment; account token cubre staging y production.
       - name: Deploy to Railway Staging
-        uses: railwayapp/railway-deploy@v1
-        with:
-          token: ${{ secrets.RAILWAY_TOKEN }}
-          service: api-core-system
-          environment: staging
+        run: |
+          railway link -p e9d0ad71-3798-46ef-bda4-12835a37e1c6 -s api-core-system -e staging -w "Core System's Projects"
+          railway up -d -y -c
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
   deploy-production:
     name: Deploy to Railway Production
@@ -149,12 +157,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
       - name: Deploy to Railway Production
-        uses: railwayapp/railway-deploy@v1
-        with:
-          token: ${{ secrets.RAILWAY_TOKEN }}
-          service: api-core-system
-          environment: production
+        run: |
+          railway link -p e9d0ad71-3798-46ef-bda4-12835a37e1c6 -s api-core-system -e production -w "Core System's Projects"
+          railway up -d -y -c
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
   rollback:
     name: Emergency Redeploy (Railway)
@@ -172,4 +186,4 @@ jobs:
       - name: Redeploy latest deployment
         run: railway redeploy -s api-core-system -e ${{ github.event.inputs.environment }} -y
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
